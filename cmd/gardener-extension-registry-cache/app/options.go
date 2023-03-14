@@ -18,10 +18,14 @@ import (
 	"os"
 
 	controllercmd "github.com/gardener/gardener/extensions/pkg/controller/cmd"
+	"github.com/gardener/gardener/extensions/pkg/controller/controlplane/genericactuator"
 	heartbeatcmd "github.com/gardener/gardener/extensions/pkg/controller/heartbeat/cmd"
+	webhookcmd "github.com/gardener/gardener/extensions/pkg/webhook/cmd"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
 	registrycmd "github.com/gardener/gardener-extension-registry-cache/pkg/cmd"
+	registryservicecmd "github.com/gardener/gardener-extension-registry-cache/pkg/cmd"
+	"github.com/gardener/gardener-extension-registry-cache/pkg/controller"
 )
 
 // ExtensionName is the name of the extension.
@@ -39,10 +43,26 @@ type Options struct {
 	controllerSwitches *controllercmd.SwitchOptions
 	reconcileOptions   *controllercmd.ReconcilerOptions
 	optionAggregator   controllercmd.OptionAggregator
+	webhookOptions     *webhookcmd.AddToManagerOptions
 }
 
 // NewOptions creates a new Options instance.
 func NewOptions() *Options {
+	webhookSwitchOptions := registryservicecmd.WebhookSwitchOptions()
+
+	// options for the webhook server
+	webhookServerOptions := &webhookcmd.ServerOptions{
+		Namespace: os.Getenv("WEBHOOK_CONFIG_NAMESPACE"),
+	}
+
+	webhookOptions := webhookcmd.NewAddToManagerOptions(
+		"registry-cache",
+		genericactuator.ShootWebhooksResourceName,
+		genericactuator.ShootWebhookNamespaceSelector(controller.Type),
+		webhookServerOptions,
+		webhookSwitchOptions,
+	)
+
 	options := &Options{
 		generalOptions:  &controllercmd.GeneralOptions{},
 		registryOptions: &registrycmd.RegistryOptions{},
@@ -70,6 +90,7 @@ func NewOptions() *Options {
 		},
 		controllerSwitches: registrycmd.ControllerSwitches(),
 		reconcileOptions:   &controllercmd.ReconcilerOptions{},
+		webhookOptions:     webhookOptions,
 	}
 
 	options.optionAggregator = controllercmd.NewOptionAggregator(
@@ -82,6 +103,7 @@ func NewOptions() *Options {
 		controllercmd.PrefixOption("heartbeat-", options.heartbeatOptions),
 		options.controllerSwitches,
 		options.reconcileOptions,
+		options.webhookOptions,
 	)
 
 	return options

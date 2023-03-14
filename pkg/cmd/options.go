@@ -21,6 +21,8 @@ import (
 	extensionsapisconfig "github.com/gardener/gardener/extensions/pkg/apis/config"
 	"github.com/gardener/gardener/extensions/pkg/controller/cmd"
 	extensionsheartbeatcontroller "github.com/gardener/gardener/extensions/pkg/controller/heartbeat"
+	webhookcmd "github.com/gardener/gardener/extensions/pkg/webhook/cmd"
+	extensioncontrolplanewebhook "github.com/gardener/gardener/extensions/pkg/webhook/controlplane"
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -30,6 +32,7 @@ import (
 	"github.com/gardener/gardener-extension-registry-cache/pkg/apis/config/v1alpha1"
 	"github.com/gardener/gardener-extension-registry-cache/pkg/apis/config/validation"
 	"github.com/gardener/gardener-extension-registry-cache/pkg/controller"
+	controlplanewebhook "github.com/gardener/gardener-extension-registry-cache/pkg/webhook/controlplane"
 )
 
 var (
@@ -111,4 +114,11 @@ func (c *RegistryServiceConfig) ApplyHealthCheckConfig(config *extensionsapiscon
 	if c.config.HealthCheckConfig != nil {
 		*config = *c.config.HealthCheckConfig
 	}
+}
+
+// WebhookSwitchOptions are the webhookcmd.SwitchOptions for the provider webhooks.
+func WebhookSwitchOptions() *webhookcmd.SwitchOptions {
+	return webhookcmd.NewSwitchOptions(
+		webhookcmd.Switch(extensioncontrolplanewebhook.WebhookName, controlplanewebhook.AddToManager),
+	)
 }

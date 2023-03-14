@@ -111,10 +111,6 @@ func (a *actuator) createResources(ctx context.Context, log logr.Logger, registr
 	if err != nil {
 		return fmt.Errorf("failed to find registry image: %w", err)
 	}
-	ensurerImage, err := imagevector.ImageVector().FindImage("cri-config-ensurer")
-	if err != nil {
-		return fmt.Errorf("failed to find ensurer image: %w", err)
-	}
 
 	objects := []client.Object{
 		&corev1.Namespace{
@@ -174,29 +170,6 @@ func (a *actuator) createResources(ctx context.Context, log logr.Logger, registr
 
 	if len(services.Items) != len(registryConfig.Caches) {
 		return fmt.Errorf("not all services for all configured caches exist")
-	}
-
-	e := criEnsurer{
-		Namespace:          registryCacheNamespaceName,
-		CRIEnsurerImage:    ensurerImage,
-		ReferencedServices: services,
-	}
-
-	os, err := e.Ensure()
-	if err != nil {
-		return err
-	}
-	objects = []client.Object{}
-	objects = append(objects, os...)
-
-	resources, err = managedresources.NewRegistry(kubernetes.SeedScheme, kubernetes.SeedCodec, kubernetes.SeedSerializer).AddAllAndSerialize(objects...)
-	if err != nil {
-		return err
-	}
-
-	err = a.createManagedResources(ctx, v1alpha1.RegistryEnsurerResourceName, namespace, resources, nil)
-	if err != nil {
-		return err
 	}
 
 	return nil

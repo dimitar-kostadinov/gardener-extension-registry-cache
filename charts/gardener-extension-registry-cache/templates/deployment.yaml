@@ -52,7 +52,12 @@ spec:
         - --leader-election-id={{ include "leaderelectionid" . }}
         - --leader-election-resource-lock={{ .Values.leaderElection.resourceLock }}
         - --gardener-version={{ .Values.gardener.version }}
+        - --webhook-config-namespace={{ .Release.Namespace }}
+        - --webhook-config-service-port={{ .Values.webhookConfig.servicePort }}
+        - --webhook-config-server-port={{ .Values.webhookConfig.serverPort }}
+        - --disable-webhooks={{ .Values.disableWebhooks | join "," }}
         env:
+        #- name: WEBHOOK_CONFIG_NAMESPACE TODO?
         - name: LEADER_ELECTION_NAMESPACE
           valueFrom:
             fieldRef:

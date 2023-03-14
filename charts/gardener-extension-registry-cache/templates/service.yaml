@@ -1,26 +1,31 @@
-{{- if .Values.metrics.enableScraping }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: gardener-extension-registry-cache
+  name: {{ include "name" . }}
   namespace: {{ .Release.Namespace }}
   annotations:
     networking.resources.gardener.cloud/from-policy-pod-label-selector: all-seed-scrape-targets
     networking.resources.gardener.cloud/from-policy-allowed-ports: '[{"port":{{ .Values.metrics.port }},"protocol":"TCP"}]'
     networking.resources.gardener.cloud/namespace-selectors: '[{"matchLabels":{"kubernetes.io/metadata.name":"garden"}}]'
     networking.resources.gardener.cloud/pod-label-selector-namespace-alias: extensions
+    networking.resources.gardener.cloud/from-world-to-ports: '[{"protocol":"TCP","port":{{ .Values.webhookConfig.serverPort }}}]'
+{{-  if .Values.ignoreResources }}
+    resources.gardener.cloud/ignore: "true"
+{{- end }}
   labels:
-    app.kubernetes.io/name: gardener-extension-registry-cache
+{{ include "labels" . | indent 4 }}
     helm.sh/chart: gardener-extension-registry-cache
-    app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   type: ClusterIP
-  clusterIP: None
   ports:
+{{- if .Values.metrics.enableScraping }}
   - name: metrics
     port: {{ .Values.metrics.port }}
     protocol: TCP
-  selector:
-    app.kubernetes.io/name: gardener-extension-registry-cache
-    app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+  - name: webhook
+    port: {{ .Values.webhookConfig.servicePort }}
+    protocol: TCP
+    targetPort: {{ .Values.webhookConfig.serverPort }}
+  selector:
+{{ include "labels" . | indent 6 }}

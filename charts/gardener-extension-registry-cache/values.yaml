@@ -38,6 +38,7 @@ registryConfig:
     - ...
 
 disableControllers: []
+disableWebhooks: []
 
 # imageVectorOverwrite: |
 #   images:
@@ -48,3 +49,7 @@ disableControllers: []
 
 gardener:
   version: ""
+
+webhookConfig:
+  servicePort: 443
+  serverPort: 10250

@@ -95,6 +95,11 @@ func (o *Options) run(ctx context.Context) error {
 		return fmt.Errorf("could not add controllers to manager: %w", err)
 	}
 
+	_, err = o.webhookOptions.Completed().AddToManager(ctx, mgr)
+	if err != nil {
+		return fmt.Errorf("could not add webhooks to manager: %w", err)
+	}
+
 	if err := mgr.Start(ctx); err != nil {
 		return fmt.Errorf("error running manager: %w", err)
 	}
