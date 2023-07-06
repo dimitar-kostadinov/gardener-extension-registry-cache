@@ -37,4 +37,6 @@ type RegistryCache struct {
 	Size *resource.Quantity
 	// GarbageCollectionEnabled enables/disables cache garbage collection
 	GarbageCollectionEnabled *bool
+	// SecretReferenceName is the name of the reference for the secret containing the upstream registry credentials
+	SecretReferenceName *string
 }

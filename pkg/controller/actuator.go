@@ -23,6 +23,7 @@ import (
 	"github.com/gardener/gardener/extensions/pkg/controller"
 	"github.com/gardener/gardener/extensions/pkg/controller/extension"
 	"github.com/gardener/gardener/extensions/pkg/util"
+	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
 	extensionsv1alpha1 "github.com/gardener/gardener/pkg/apis/extensions/v1alpha1"
 	"github.com/gardener/gardener/pkg/client/kubernetes"
 	"github.com/gardener/gardener/pkg/utils/managedresources"
@@ -102,7 +103,7 @@ func (a *actuator) Restore(ctx context.Context, log logr.Logger, ex *extensionsv
 }
 
 // Migrate the Extension resource.
-func (a *actuator) Migrate(ctx context.Context, log logr.Logger, ex *extensionsv1alpha1.Extension) error {
+func (a *actuator) Migrate(_ context.Context, _ logr.Logger, _ *extensionsv1alpha1.Extension) error {
 	return nil
 }
 
@@ -129,8 +130,31 @@ func (a *actuator) createResources(ctx context.Context, log logr.Logger, registr
 			RegistryImage:            registryImage,
 		}
 
+		// init upstream registry credentials
+		if cache.SecretReferenceName != nil {
+			refSecretName, err := lookupReferencedSecret(cluster, *cache.SecretReferenceName)
+			if err != nil {
+				return err
+			}
+			refSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      refSecretName,
+					Namespace: namespace,
+				},
+			}
+			if err = a.client.Get(ctx, client.ObjectKeyFromObject(refSecret), refSecret); err != nil {
+				return err
+			}
+			if err = validateUpstreamRegistrySecret(refSecret); err != nil {
+				return err
+			}
+			c.UpstreamUsername = string(refSecret.Data["username"])
+			c.UpstreamPassword = string(refSecret.Data["password"])
+		}
+
 		os, err := c.Ensure()
 		if err != nil {
+			log.Error(err, "could not ensure deployment")
 			return err
 		}
 
@@ -210,4 +234,34 @@ func (a *actuator) updateStatus(ctx context.Context, ex *extensionsv1alpha1.Exte
 	patch := client.MergeFrom(ex.DeepCopy())
 	// ex.Status.Resources = resources
 	return a.client.Status().Patch(ctx, ex, patch)
+}
+
+func lookupReferencedSecret(cluster *controller.Cluster, refname string) (string, error) {
+	if cluster.Shoot != nil {
+		for _, ref := range cluster.Shoot.Spec.Resources {
+			if ref.Name == refname {
+				if ref.ResourceRef.Kind != "Secret" {
+					err := fmt.Errorf("invalid referenced resource, expected kind Secret, not %s: %s", ref.ResourceRef.Kind, ref.ResourceRef.Name)
+					return "", err
+				}
+				return v1beta1constants.ReferencedResourcesPrefix + ref.ResourceRef.Name, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("missing or invalid referenced resource: %s", refname)
+}
+
+// validateUpstreamRegistrySecret validates the state of an upstream registry secret
+func validateUpstreamRegistrySecret(secret *corev1.Secret) error {
+	key := client.ObjectKeyFromObject(secret)
+	if _, ok := secret.Data["username"]; !ok {
+		return fmt.Errorf("secret %s is missing username value", key.String())
+	}
+	if _, ok := secret.Data["password"]; !ok {
+		return fmt.Errorf("secret %s is missing password value", key.String())
+	}
+	if len(secret.Data) != 2 {
+		return fmt.Errorf("secret %s should have only two data entries", key.String())
+	}
+	return nil
 }

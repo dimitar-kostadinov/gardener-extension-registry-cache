@@ -37,8 +37,9 @@ type registryCache struct {
 	Upstream                 string
 	VolumeSize               resource.Quantity
 	GarbageCollectionEnabled bool
-
-	RegistryImage *imagevector.Image
+	UpstreamUsername         string
+	UpstreamPassword         string
+	RegistryImage            *imagevector.Image
 }
 
 const (
@@ -47,10 +48,11 @@ const (
 	registryCacheVolumeName    = "cache-volume"
 	registryVolumeMountPath    = "/var/lib/registry"
 
-	environmentVarialbleNameRegistryURL    = "REGISTRY_PROXY_REMOTEURL"
-	environmentVarialbleNameRegistryDelete = "REGISTRY_STORAGE_DELETE_ENABLED"
-
-	registryCacheServiceUpstreamLabel = "upstream-host"
+	environmentVariableNameRegistryURL      = "REGISTRY_PROXY_REMOTEURL"
+	environmentVariableNameRegistryUsername = "REGISTRY_PROXY_USERNAME"
+	environmentVariableNameRegistryPassword = "REGISTRY_PROXY_PASSWORD"
+	environmentVariableNameRegistryDelete   = "REGISTRY_STORAGE_DELETE_ENABLED"
+	registryCacheServiceUpstreamLabel       = "upstream-host"
 )
 
 func (c *registryCache) Ensure() ([]client.Object, error) {
@@ -69,6 +71,33 @@ func (c *registryCache) Ensure() ([]client.Object, error) {
 		upstreamURL = "registry-1.docker.io"
 	}
 	upstreamURL = fmt.Sprintf("https://%s", upstreamURL)
+
+	envVars := []v1.EnvVar{
+		{
+			Name:  environmentVariableNameRegistryURL,
+			Value: upstreamURL,
+		},
+		{
+			Name:  environmentVariableNameRegistryDelete,
+			Value: strconv.FormatBool(c.GarbageCollectionEnabled),
+		},
+	}
+	// set upstream registry credentials
+	if len(c.UpstreamUsername) > 0 && len(c.UpstreamPassword) > 0 {
+		envVars = append(envVars,
+			v1.EnvVar{
+				Name:  environmentVariableNameRegistryUsername,
+				Value: c.UpstreamUsername,
+			},
+			v1.EnvVar{
+				Name: environmentVariableNameRegistryPassword,
+				// value is wrapped in single quotes so that it is interpreted as strings in registry config.yaml,
+				// otherwise, the registry may crash; for example password for gcr _json_key user is json and registry
+				// cannot start as yaml unmarshal errors occurs (yaml is superset of json)
+				Value: fmt.Sprintf("'%s'", c.UpstreamPassword),
+			},
+		)
+	}
 
 	var (
 		service = &v1.Service{
@@ -117,16 +146,7 @@ func (c *registryCache) Ensure() ([]client.Object, error) {
 										Name:          registryCacheInternalName,
 									},
 								},
-								Env: []v1.EnvVar{
-									{
-										Name:  environmentVarialbleNameRegistryURL,
-										Value: upstreamURL,
-									},
-									{
-										Name:  environmentVarialbleNameRegistryDelete,
-										Value: strconv.FormatBool(c.GarbageCollectionEnabled),
-									},
-								},
+								Env: envVars,
 								VolumeMounts: []v1.VolumeMount{
 									{
 										Name:      registryCacheVolumeName,

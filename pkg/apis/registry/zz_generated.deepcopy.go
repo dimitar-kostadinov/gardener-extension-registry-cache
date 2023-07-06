@@ -38,6 +38,11 @@ func (in *RegistryCache) DeepCopyInto(out *RegistryCache) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.SecretReferenceName != nil {
+		in, out := &in.SecretReferenceName, &out.SecretReferenceName
+		*out = new(string)
+		**out = **in
+	}
 	return
 }
 

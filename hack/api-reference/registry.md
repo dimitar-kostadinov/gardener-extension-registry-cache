@@ -62,6 +62,18 @@ bool
 <p>GarbageCollectionEnabled enables/disables cache garbage collection, defaults to true.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>secretReferenceName</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretReferenceName is the name of the reference for the secret containing the upstream registry credentials.</p>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="registry.extensions.gardener.cloud/v1alpha1.RegistryConfig">RegistryConfig

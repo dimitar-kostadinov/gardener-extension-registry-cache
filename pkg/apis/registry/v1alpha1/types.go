@@ -45,4 +45,7 @@ type RegistryCache struct {
 	// GarbageCollectionEnabled enables/disables cache garbage collection, defaults to true.
 	// +optional
 	GarbageCollectionEnabled *bool `json:"garbageCollectionEnabled,omitempty"`
+	// SecretReferenceName is the name of the reference for the secret containing the upstream registry credentials.
+	// +optional
+	SecretReferenceName *string `json:"secretReferenceName"`
 }
