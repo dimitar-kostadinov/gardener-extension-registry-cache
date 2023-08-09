@@ -3,7 +3,7 @@ kind: ControllerDeployment
 metadata:
   name: extension-registry-cache
 type: helm
-providerConfig:
-  values:
-    image:
-      tag: latest
+#providerConfig:
+#  values:
+#    image:
+#      tag: latest

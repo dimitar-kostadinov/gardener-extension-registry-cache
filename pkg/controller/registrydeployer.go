@@ -17,7 +17,6 @@ package controller
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/gardener/gardener/pkg/utils/imagevector"
 	appsv1 "k8s.io/api/apps/v1"
@@ -43,21 +42,25 @@ type registryCache struct {
 }
 
 const (
-	registryCacheNamespaceName = "registry-cache"
-	registryCacheInternalName  = "registry-cache"
-	registryCacheVolumeName    = "cache-volume"
-	registryVolumeMountPath    = "/var/lib/registry"
+	registryCacheNamespaceName        = "registry-cache"
+	registryCacheInternalName         = "registry-cache"
+	registryCacheVolumeName           = "cache-volume"
+	registryVolumeMountPath           = "/var/lib/registry"
+	registryCacheMetricsName          = "metrics"
+	registryCacheServiceUpstreamLabel = "upstream-host"
+	registryCachePort                 = 5000
+	registryCacheDebugPort            = 5001
 
-	environmentVariableNameRegistryURL      = "REGISTRY_PROXY_REMOTEURL"
-	environmentVariableNameRegistryUsername = "REGISTRY_PROXY_USERNAME"
-	environmentVariableNameRegistryPassword = "REGISTRY_PROXY_PASSWORD"
-	environmentVariableNameRegistryDelete   = "REGISTRY_STORAGE_DELETE_ENABLED"
-	registryCacheServiceUpstreamLabel       = "upstream-host"
+	envRegistryProxyURL                   = "REGISTRY_PROXY_REMOTEURL"
+	envRegistryProxyUsername              = "REGISTRY_PROXY_USERNAME"
+	envRegistryProxyPassword              = "REGISTRY_PROXY_PASSWORD"
+	envRegistryStorageDelete              = "REGISTRY_STORAGE_DELETE_ENABLED"
+	envRegistryHttpAddr                   = "REGISTRY_HTTP_ADDR"
+	envRegistryHttpDebugAddr              = "REGISTRY_HTTP_DEBUG_ADDR"
+	envRegistryHttpDebugPrometheusEnabled = "REGISTRY_HTTP_DEBUG_PROMETHEUS_ENABLED"
 )
 
 func (c *registryCache) Ensure() ([]client.Object, error) {
-	c.Name = strings.Replace(fmt.Sprintf("registry-%s", strings.Split(c.Upstream, ":")[0]), ".", "-", -1)
-
 	if c.Labels == nil {
 		c.Labels = map[string]string{
 			"app": c.Name,
@@ -74,23 +77,35 @@ func (c *registryCache) Ensure() ([]client.Object, error) {
 
 	envVars := []v1.EnvVar{
 		{
-			Name:  environmentVariableNameRegistryURL,
+			Name:  envRegistryProxyURL,
 			Value: upstreamURL,
 		},
 		{
-			Name:  environmentVariableNameRegistryDelete,
+			Name:  envRegistryStorageDelete,
 			Value: strconv.FormatBool(c.GarbageCollectionEnabled),
+		},
+		{
+			Name:  envRegistryHttpAddr,
+			Value: fmt.Sprintf(":%d", registryCachePort),
+		},
+		{
+			Name:  envRegistryHttpDebugAddr,
+			Value: fmt.Sprintf(":%d", registryCacheDebugPort),
+		},
+		{
+			Name:  envRegistryHttpDebugPrometheusEnabled,
+			Value: "true",
 		},
 	}
 	// set upstream registry credentials
 	if len(c.UpstreamUsername) > 0 && len(c.UpstreamPassword) > 0 {
 		envVars = append(envVars,
 			v1.EnvVar{
-				Name:  environmentVariableNameRegistryUsername,
+				Name:  envRegistryProxyUsername,
 				Value: c.UpstreamUsername,
 			},
 			v1.EnvVar{
-				Name: environmentVariableNameRegistryPassword,
+				Name: envRegistryProxyPassword,
 				// value is wrapped in single quotes so that it is interpreted as strings in registry config.yaml,
 				// otherwise, the registry may crash; for example password for gcr _json_key user is json and registry
 				// cannot start as yaml unmarshal errors occurs (yaml is superset of json)
@@ -108,12 +123,20 @@ func (c *registryCache) Ensure() ([]client.Object, error) {
 			},
 			Spec: v1.ServiceSpec{
 				Selector: c.Labels,
-				Ports: []v1.ServicePort{{
-					Name:       registryCacheInternalName,
-					Port:       5000,
-					Protocol:   v1.ProtocolTCP,
-					TargetPort: intstr.FromString(registryCacheInternalName),
-				}},
+				Ports: []v1.ServicePort{
+					{
+						Name:       registryCacheInternalName,
+						Port:       registryCachePort,
+						Protocol:   v1.ProtocolTCP,
+						TargetPort: intstr.FromString(registryCacheInternalName),
+					},
+					{
+						Name:       registryCacheMetricsName,
+						Port:       registryCacheDebugPort,
+						Protocol:   v1.ProtocolTCP,
+						TargetPort: intstr.FromString(registryCacheMetricsName),
+					},
+				},
 				Type: v1.ServiceTypeClusterIP,
 			},
 		}
@@ -138,12 +161,26 @@ func (c *registryCache) Ensure() ([]client.Object, error) {
 						Containers: []v1.Container{
 							{
 								Name:            registryCacheInternalName,
-								Image:           c.RegistryImage.Repository,
+								Image:           c.RegistryImage.String(),
 								ImagePullPolicy: v1.PullIfNotPresent,
+								LivenessProbe: &v1.Probe{
+									ProbeHandler: v1.ProbeHandler{
+										HTTPGet: &v1.HTTPGetAction{
+											Path: "/debug/health",
+											Port: intstr.FromInt(registryCacheDebugPort),
+										},
+									},
+									InitialDelaySeconds: 30,
+									PeriodSeconds:       30,
+								},
 								Ports: []v1.ContainerPort{
 									{
-										ContainerPort: 5000,
+										ContainerPort: registryCachePort,
 										Name:          registryCacheInternalName,
+									},
+									{
+										ContainerPort: registryCacheDebugPort,
+										Name:          registryCacheMetricsName,
 									},
 								},
 								Env: envVars,

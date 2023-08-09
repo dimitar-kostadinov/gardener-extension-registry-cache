@@ -17,6 +17,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"strings"
 	"time"
 
 	extensionsconfig "github.com/gardener/gardener/extensions/pkg/apis/config"
@@ -26,6 +28,9 @@ import (
 	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
 	extensionsv1alpha1 "github.com/gardener/gardener/pkg/apis/extensions/v1alpha1"
 	"github.com/gardener/gardener/pkg/client/kubernetes"
+	"github.com/gardener/gardener/pkg/controllerutils"
+	"github.com/gardener/gardener/pkg/resourcemanager/controller/garbagecollector/references"
+	kubernetesutils "github.com/gardener/gardener/pkg/utils/kubernetes"
 	"github.com/gardener/gardener/pkg/utils/managedresources"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -41,6 +46,433 @@ import (
 	"github.com/gardener/gardener-extension-registry-cache/pkg/apis/registry/v1alpha1"
 	"github.com/gardener/gardener-extension-registry-cache/pkg/imagevector"
 )
+
+const scrapeConfig = `- job_name: '%s-metrics'
+  scheme: https
+  tls_config:
+    ca_file: /etc/prometheus/seed/ca.crt
+  authorization:
+    type: Bearer
+    credentials_file: /var/run/secrets/gardener.cloud/shoot/token/token
+  honor_labels: false      
+  kubernetes_sd_configs:
+  - role: endpoints
+    api_server: https://kube-apiserver:443
+    namespaces:
+      names: [%s]
+    tls_config:
+      ca_file: /etc/prometheus/seed/ca.crt
+    authorization:
+      type: Bearer
+      credentials_file: /var/run/secrets/gardener.cloud/shoot/token/token
+  relabel_configs:
+  - source_labels: [__meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+    regex: %s;%s
+    action: keep
+  - action: labelmap
+    regex: __meta_kubernetes_service_label_(.+)        
+  - target_label: __address__
+    replacement: kube-apiserver:443 
+  - source_labels: [__meta_kubernetes_endpoint_node_name]
+    target_label: node
+  - source_labels: [__meta_kubernetes_pod_name]
+    target_label: pod
+  - source_labels: [__meta_kubernetes_pod_name, __meta_kubernetes_pod_container_port_number]
+    regex: (.+);(.+)
+    target_label: __metrics_path__
+    replacement: /api/v1/namespaces/%s/pods/${1}:${2}/proxy/metrics
+  metric_relabel_configs:
+  - source_labels: [ __name__ ]
+    regex: registry_proxy_.+
+    action: keep
+`
+
+const dashboard = `{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Plutono --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "id": null,
+  "iteration": 1691483983180,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 39,
+      "panels": [],
+      "repeat": null,
+      "title": "Registry Proxy Cache",
+      "type": "row"
+    },
+    {
+      "datasource": null,
+      "description": "Pulled bytes from upstream",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 41,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.22",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "registry_proxy_bytesPulled_total/1000000",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "pulled bytes from upstream {{pod}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Pulled",
+      "type": "stat"
+    },
+    {
+      "datasource": null,
+      "description": "Pulled bytes from upstream",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "id": 43,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.22",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "registry_proxy_bytesPushed_total/1000000",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "pushed bytes from upstream {{pod}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Pushed",
+      "type": "stat"
+    },
+    {
+      "datasource": null,
+      "description": "Pulled bytes from upstream",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 44,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.5.22",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "(registry_proxy_bytesPushed_total - registry_proxy_bytesPulled_total)/1000000",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "pulled bytes from upstream {{pod}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Delta",
+      "type": "stat"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus",
+      "description": "The cache hits describes how many image pull requests were answered due to a cached image.\n\nThe cache misses describes how much image pull requests need to be done to upstream, because the requests image does not exist in the local cache.",
+      "editable": true,
+      "error": false,
+      "fieldConfig": {
+        "defaults": {
+          "links": []
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "grid": {},
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "hiddenSeries": false,
+      "id": 42,
+      "interval": null,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "links": [],
+      "nullPointMode": "connected",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.22",
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "rate(registry_proxy_hits_total[$__rate_interval])",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "hits {{app}}",
+          "refId": "A",
+          "step": 40
+        },
+        {
+          "exemplar": true,
+          "expr": "rate(registry_proxy_misses_total[$__rate_interval])",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "misses {{app}}",
+          "refId": "B",
+          "step": 40
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Cache Hits and Misses",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "cumulative"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:211",
+          "format": "none",
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:212",
+          "format": "pps",
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    }
+  ],
+  "refresh": "1h",
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": [
+    "image",
+    "cache"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "3h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "14d"
+    ]
+  },
+  "timezone": "utc",
+  "title": "Registry Proxy Cache",
+  "uid": "extension-extension-registry-cache",
+  "version": 1
+}`
 
 // NewActuator returns an actuator responsible for Extension resources.
 func NewActuator(config config.Configuration) extension.Actuator {
@@ -121,6 +553,8 @@ func (a *actuator) createResources(ctx context.Context, log logr.Logger, registr
 		},
 	}
 
+	scrapeJobs := ""
+
 	for _, cache := range registryConfig.Caches {
 		c := registryCache{
 			Namespace:                registryCacheNamespaceName,
@@ -129,6 +563,8 @@ func (a *actuator) createResources(ctx context.Context, log logr.Logger, registr
 			GarbageCollectionEnabled: *cache.GarbageCollectionEnabled,
 			RegistryImage:            registryImage,
 		}
+
+		c.Name = strings.Replace(fmt.Sprintf("registry-%s", strings.Split(cache.Upstream, ":")[0]), ".", "-", -1)
 
 		// init upstream registry credentials
 		if cache.SecretReferenceName != nil {
@@ -158,6 +594,8 @@ func (a *actuator) createResources(ctx context.Context, log logr.Logger, registr
 			return err
 		}
 
+		scrapeJobs += fmt.Sprintf(scrapeConfig, c.Name, c.Namespace, c.Name, registryCacheMetricsName, c.Namespace)
+
 		objects = append(objects, os...)
 	}
 
@@ -167,7 +605,7 @@ func (a *actuator) createResources(ctx context.Context, log logr.Logger, registr
 	}
 
 	// create ManagedResource for the registryCache
-	err = a.createManagedResources(ctx, v1alpha1.RegistryResourceName, namespace, resources, nil)
+	err = a.createManagedResources(ctx, v1alpha1.RegistryResourceName, namespace, resources, map[string]string{v1beta1constants.ShootNoCleanup: "true"})
 	if err != nil {
 		return err
 	}
@@ -194,6 +632,28 @@ func (a *actuator) createResources(ctx context.Context, log logr.Logger, registr
 
 	if len(services.Items) != len(registryConfig.Caches) {
 		return fmt.Errorf("not all services for all configured caches exist")
+	}
+
+	monitoring := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "registry-cache-config-prometheus",
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"scrape_config":       scrapeJobs,
+			"dashboard_operators": fmt.Sprintf("registry-cache-dashboard.json: '%s'", dashboard),
+		},
+	}
+	utilruntime.Must(kubernetesutils.MakeUnique(monitoring))
+
+	_, err = controllerutils.GetAndCreateOrMergePatch(ctx, a.client, monitoring, func() error {
+		metav1.SetMetaDataLabel(&monitoring.ObjectMeta, "component", "registry-cache")
+		metav1.SetMetaDataLabel(&monitoring.ObjectMeta, "extensions.gardener.cloud/configuration", "monitoring")
+		metav1.SetMetaDataLabel(&monitoring.ObjectMeta, references.LabelKeyGarbageCollectable, references.LabelValueGarbageCollectable)
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	return nil
