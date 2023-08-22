@@ -17,7 +17,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"strings"
 	"time"
 
@@ -39,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/selection"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -96,16 +96,18 @@ const dashboard = `{
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
+        "limit": 100,
         "name": "Annotations & Alerts",
+        "showIn": 0,
         "type": "dashboard"
       }
     ]
   },
+  "description": "",
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": null,
-  "iteration": 1691483983180,
+  "iteration": 1694440727751,
   "links": [],
   "panels": [
     {
@@ -120,12 +122,12 @@ const dashboard = `{
       "id": 39,
       "panels": [],
       "repeat": null,
-      "title": "Registry Proxy Cache",
+      "title": "Аggregation",
       "type": "row"
     },
     {
       "datasource": null,
-      "description": "Pulled bytes from upstream",
+      "description": "Bytes pulled from upstream registry",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -138,19 +140,16 @@ const dashboard = `{
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
-          }
+          },
+          "unit": "decbytes"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 6,
-        "w": 4,
+        "w": 8,
         "x": 0,
         "y": 1
       },
@@ -170,25 +169,25 @@ const dashboard = `{
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.22",
+      "pluginVersion": "7.5.23",
       "targets": [
         {
           "exemplar": true,
-          "expr": "registry_proxy_bytesPulled_total/1000000",
+          "expr": "sum by (type) (increase(registry_proxy_bytes_pulled_total{upstream_host=~\"$upstream_host\"}[$__range]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "pulled bytes from upstream {{pod}}",
+          "legendFormat": "{{type}}",
           "refId": "A"
         }
       ],
-      "title": "Pulled",
+      "title": "Pulled from upstream",
       "type": "stat"
     },
     {
       "datasource": null,
-      "description": "Pulled bytes from upstream",
+      "description": "Bytes pushed to clients",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -201,20 +200,17 @@ const dashboard = `{
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
-          }
+          },
+          "unit": "decbytes"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 6,
-        "w": 4,
-        "x": 4,
+        "w": 8,
+        "x": 8,
         "y": 1
       },
       "id": 43,
@@ -233,25 +229,26 @@ const dashboard = `{
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.22",
+      "pluginVersion": "7.5.23",
       "targets": [
         {
           "exemplar": true,
-          "expr": "registry_proxy_bytesPushed_total/1000000",
+          "expr": "sum by (type) (increase(registry_proxy_bytes_pushed_total{upstream_host=~\"$upstream_host\"}[$__range]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "pushed bytes from upstream {{pod}}",
+          "legendFormat": "{{type}}",
           "refId": "A"
         }
       ],
-      "title": "Pushed",
+      "title": "Pushed to clients",
+      "transformations": [],
       "type": "stat"
     },
     {
       "datasource": null,
-      "description": "Pulled bytes from upstream",
+      "description": "Pulled - Pushed bytes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -264,26 +261,23 @@ const dashboard = `{
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
-          }
+          },
+          "unit": "decbytes"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 6,
-        "w": 4,
-        "x": 8,
+        "w": 8,
+        "x": 16,
         "y": 1
       },
       "id": 44,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -293,24 +287,163 @@ const dashboard = `{
           "fields": "",
           "values": false
         },
-        "text": {},
+        "text": {
+          "titleSize": 1
+        },
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.22",
+      "pluginVersion": "7.5.23",
+      "repeat": null,
       "targets": [
         {
           "exemplar": true,
-          "expr": "(registry_proxy_bytesPushed_total - registry_proxy_bytesPulled_total)/1000000",
+          "expr": "sum(increase(registry_proxy_bytes_pushed_total{upstream_host=~\"$upstream_host\"}[$__range]) - increase(registry_proxy_bytes_pulled_total{upstream_host=~\"$upstream_host\"}[$__range]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "pulled bytes from upstream {{pod}}",
+          "legendFormat": "",
           "refId": "A"
         }
       ],
       "title": "Delta",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "id": 47,
+      "panels": [],
+      "title": "General",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus",
+      "description": "The pulled bytes represent the pulled bytes form upstream registry.\n\nThe pushed bytes represent the bytes pushed to clients of this cache registry.",
+      "editable": true,
+      "error": false,
+      "fieldConfig": {
+        "defaults": {
+          "links": [],
+          "unit": "decbytes"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "grid": {},
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "hiddenSeries": false,
+      "id": 42,
+      "interval": null,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "links": [],
+      "nullPointMode": "connected",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.23",
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum by (upstream_host) (rate(registry_proxy_bytes_pulled_total{upstream_host=~\"$upstream_host\"}[$__rate_interval]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "pulled {{ upstream_host }}",
+          "refId": "A",
+          "step": 40
+        },
+        {
+          "exemplar": true,
+          "expr": "sum by (upstream_host) (rate(registry_proxy_bytes_pushed_total{upstream_host=~\"$upstream_host\"}[$__rate_interval]))",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "pushed {{ upstream_host }}",
+          "refId": "B",
+          "step": 40
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Pulled and Pushed Bytes Rate",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "cumulative"
+      },
+      "transformations": [],
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:211",
+          "format": "decbytes",
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:212",
+          "format": "pps",
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -331,19 +464,21 @@ const dashboard = `{
       "fillGradient": 0,
       "grid": {},
       "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 1
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
       },
       "hiddenSeries": false,
-      "id": 42,
+      "id": 45,
       "interval": null,
       "legend": {
+        "alignAsTable": true,
         "avg": false,
         "current": false,
         "max": false,
         "min": false,
+        "rightSide": true,
         "show": true,
         "total": false,
         "values": false
@@ -356,7 +491,7 @@ const dashboard = `{
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.22",
+      "pluginVersion": "7.5.23",
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
@@ -367,24 +502,24 @@ const dashboard = `{
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(registry_proxy_hits_total[$__rate_interval])",
+          "expr": "sum by (upstream_host) (rate(registry_proxy_hits_total{upstream_host=~\"$upstream_host\"}[$__rate_interval]))",
           "format": "time_series",
           "hide": false,
           "instant": false,
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "hits {{app}}",
+          "intervalFactor": 1,
+          "legendFormat": "hits {{ upstream_host }}",
           "refId": "A",
           "step": 40
         },
         {
           "exemplar": true,
-          "expr": "rate(registry_proxy_misses_total[$__rate_interval])",
+          "expr": "sum by (upstream_host) (rate(registry_proxy_misses_total{upstream_host=~\"$upstream_host\"}[$__rate_interval]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "misses {{app}}",
+          "intervalFactor": 1,
+          "legendFormat": "misses {{ upstream_host }}",
           "refId": "B",
           "step": 40
         }
@@ -393,7 +528,7 @@ const dashboard = `{
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Cache Hits and Misses",
+      "title": "Cache Hits and Misses Rate",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -429,23 +564,506 @@ const dashboard = `{
         "align": false,
         "alignLevel": null
       }
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 53,
+      "panels": [],
+      "title": "Bytes",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "hiddenSeries": false,
+      "id": 49,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.23",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(registry_proxy_bytes_pulled_total{upstream_host=~\"$upstream_host\"}) by (upstream_host)",
+          "interval": "",
+          "legendFormat": "{{ upstream_host }}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Bytes pulled",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "decbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "hiddenSeries": false,
+      "id": 51,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.23",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(registry_proxy_bytes_pushed_total{upstream_host=~\"$upstream_host\"}) by (upstream_host)",
+          "interval": "",
+          "legendFormat": "{{ upstream_host }}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Bytes pushed",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "decbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 55,
+      "panels": [],
+      "title": "Persistent Volumes",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "hiddenSeries": false,
+      "id": 59,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.23",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~\"^cache-volume-registry-(${upstream_host:pipe})-0$\"}",
+          "interval": "",
+          "legendFormat": "{{persistentvolumeclaim}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Persistent Volume Size",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^cache-volume-registry-(.+)-0$",
+            "renamePattern": "$1"
+          }
+        }
+      ],
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "decbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "decimals": 2,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "hiddenSeries": false,
+      "id": 57,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "hideZero": false,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "sideWidth": null,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.23",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "kubelet_volume_stats_used_bytes{persistentvolumeclaim=~\"^cache-volume-registry-(${upstream_host:pipe})-0$\"} / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~\"^cache-volume-registry-(${upstream_host:pipe})-0$\"}",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{persistentvolumeclaim}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Persistent Volume Usage",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^cache-volume-registry-(.+)-0$",
+            "renamePattern": "$1"
+          }
+        }
+      ],
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:591",
+          "decimals": null,
+          "format": "percentunit",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:592",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
-  "refresh": "1h",
+  "refresh": "1m",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [
     "image",
-    "cache"
+    "cache",
+    "registry",
+    "pull through"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "tags": [],
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": null,
+        "definition": "label_values({__name__=~\"registry_proxy_.+\"}, upstream_host)",
+        "description": "Pull through cache image registry",
+        "error": null,
+        "hide": 0,
+        "includeAll": true,
+        "label": "Registry",
+        "multi": true,
+        "name": "upstream_host",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"registry_proxy_.+\"}, upstream_host)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {
+    "hidden": false,
     "refresh_intervals": [
       "10s",
       "30s",
@@ -469,7 +1087,7 @@ const dashboard = `{
     ]
   },
   "timezone": "utc",
-  "title": "Registry Proxy Cache",
+  "title": "Image pull through cache registries",
   "uid": "extension-extension-registry-cache",
   "version": 1
 }`
