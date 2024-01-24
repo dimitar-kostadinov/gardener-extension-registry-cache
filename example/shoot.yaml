@@ -25,6 +25,10 @@ spec:
       - upstream: quay.io
         garbageCollection:
           enabled: false
+      - upstream: eu.gcr.io
+      - upstream: europe-docker.pkg.dev
+      - upstream: gcr.io
+      - upstream: registry.k8s.io
   networking:
     type: calico
   provider:
@@ -36,7 +40,7 @@ spec:
       cri:
         name: containerd
       minimum: 1
-      maximum: 1
+      maximum: 4
       maxSurge: 1
       maxUnavailable: 0
   kubernetes:

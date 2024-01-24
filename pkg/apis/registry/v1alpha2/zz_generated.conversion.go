@@ -149,6 +149,7 @@ func Convert_registry_RegistryCache_To_v1alpha2_RegistryCache(in *registry.Regis
 func autoConvert_v1alpha2_RegistryCacheStatus_To_registry_RegistryCacheStatus(in *RegistryCacheStatus, out *registry.RegistryCacheStatus, s conversion.Scope) error {
 	out.Upstream = in.Upstream
 	out.Endpoint = in.Endpoint
+	out.NodePort = in.NodePort
 	return nil
 }
 
@@ -160,6 +161,7 @@ func Convert_v1alpha2_RegistryCacheStatus_To_registry_RegistryCacheStatus(in *Re
 func autoConvert_registry_RegistryCacheStatus_To_v1alpha2_RegistryCacheStatus(in *registry.RegistryCacheStatus, out *RegistryCacheStatus, s conversion.Scope) error {
 	out.Upstream = in.Upstream
 	out.Endpoint = in.Endpoint
+	out.NodePort = in.NodePort
 	return nil
 }
 

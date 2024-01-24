@@ -16,10 +16,8 @@ package operatingsystemconfig
 
 import (
 	"context"
-	_ "embed"
-	"encoding/base64"
 	"fmt"
-	"strings"
+	"path/filepath"
 
 	gcontext "github.com/gardener/gardener/extensions/pkg/webhook/context"
 	"github.com/gardener/gardener/extensions/pkg/webhook/controlplane/genericmutator"
@@ -35,9 +33,26 @@ import (
 	registryutils "github.com/gardener/gardener-extension-registry-cache/pkg/utils/registry"
 )
 
-var (
-	//go:embed scripts/configure-containerd-registries.sh
-	configureContainerdRegistriesScript string
+const hostsTOMLTemplate = `server = "%[1]s"
+
+[host."http://127.0.0.1:%[2]d"]
+ capabilities = ["pull", "resolve"]
+[host."%[1]s"]
+ capabilities = ["pull", "resolve"]
+`
+
+//const hostsTOMLTemplate = `server = "%[1]s"
+//
+//[host."%[2]s"]
+//  capabilities = ["pull", "resolve"]
+//[host."%[1]s"]
+//  capabilities = ["pull", "resolve"]
+//`
+
+const (
+	// containerdRegistryHostsDirectory is a directory that is created by the containerd-inializer systemd service.
+	// containerd is configured to read registry configuration from this directory.
+	containerdRegistryHostsDirectory = "/etc/containerd/certs.d"
 )
 
 // NewEnsurer creates a new controlplane ensurer.
@@ -57,22 +72,7 @@ type ensurer struct {
 }
 
 // EnsureAdditionalFiles ensures that the containerd registry configuration files are added to the <new> files.
-func (e *ensurer) EnsureAdditionalFiles(_ context.Context, _ gcontext.GardenContext, new, _ *[]extensionsv1alpha1.File) error {
-	appendUniqueFile(new, extensionsv1alpha1.File{
-		Path:        "/opt/bin/configure-containerd-registries.sh",
-		Permissions: pointer.Int32(0744),
-		Content: extensionsv1alpha1.FileContent{
-			Inline: &extensionsv1alpha1.FileContentInline{
-				Encoding: "b64",
-				Data:     base64.StdEncoding.EncodeToString([]byte(configureContainerdRegistriesScript)),
-			},
-		},
-	})
-
-	return nil
-}
-
-func (e *ensurer) EnsureAdditionalUnits(ctx context.Context, gctx gcontext.GardenContext, new, _ *[]extensionsv1alpha1.Unit) error {
+func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx gcontext.GardenContext, new, _ *[]extensionsv1alpha1.File) error {
 	cluster, err := gctx.GetCluster(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get the cluster resource: %w", err)
@@ -109,31 +109,19 @@ func (e *ensurer) EnsureAdditionalUnits(ctx context.Context, gctx gcontext.Garde
 		return fmt.Errorf("failed to decode providerStatus of extension '%s': %w", client.ObjectKeyFromObject(extension), err)
 	}
 
-	scriptArgs := make([]string, 0, len(registryStatus.Caches))
 	for _, cache := range registryStatus.Caches {
-		scriptArgs = append(scriptArgs, fmt.Sprintf("%s,%s,%s", cache.Upstream, cache.Endpoint, registryutils.GetUpstreamURL(cache.Upstream)))
+		upstreamURL := registryutils.GetUpstreamURL(cache.Upstream)
+
+		appendUniqueFile(new, extensionsv1alpha1.File{
+			Path:        filepath.Join(containerdRegistryHostsDirectory, cache.Upstream, "hosts.toml"),
+			Permissions: pointer.Int32(0644),
+			Content: extensionsv1alpha1.FileContent{
+				Inline: &extensionsv1alpha1.FileContentInline{
+					Data: fmt.Sprintf(hostsTOMLTemplate, upstreamURL, cache.NodePort),
+				},
+			},
+		})
 	}
-
-	unit := extensionsv1alpha1.Unit{
-		Name:    "configure-containerd-registries.service",
-		Command: extensionsv1alpha1.UnitCommandPtr(extensionsv1alpha1.CommandStart),
-		Enable:  pointer.Bool(true),
-		Content: pointer.String(`[Unit]
-Description=Configures containerd registries
-
-[Install]
-WantedBy=multi-user.target
-
-[Unit]
-After=containerd.service
-Requires=containerd.service
-
-[Service]
-Type=simple
-ExecStart=/opt/bin/configure-containerd-registries.sh ` + strings.Join(scriptArgs, " ")),
-	}
-
-	appendUniqueUnit(new, unit)
 
 	return nil
 }
@@ -149,17 +137,4 @@ func appendUniqueFile(files *[]extensionsv1alpha1.File, file extensionsv1alpha1.
 	}
 
 	*files = append(resFiles, file)
-}
-
-// appendUniqueUnit appends a unit only if it does not exist, otherwise overwrite content of previous unit
-func appendUniqueUnit(units *[]extensionsv1alpha1.Unit, unit extensionsv1alpha1.Unit) {
-	resFiles := make([]extensionsv1alpha1.Unit, 0, len(*units))
-
-	for _, f := range *units {
-		if f.Name != unit.Name {
-			resFiles = append(resFiles, f)
-		}
-	}
-
-	*units = append(resFiles, unit)
 }

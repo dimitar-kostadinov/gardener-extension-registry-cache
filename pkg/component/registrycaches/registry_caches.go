@@ -250,8 +250,8 @@ func (r *registryCaches) computeResourcesData(ctx context.Context) (map[string][
 		)
 	}
 
-	for _, cache := range r.values.Caches {
-		cacheObjects, err := r.computeResourcesDataForRegistryCache(ctx, &cache, serviceAccountName)
+	for i, cache := range r.values.Caches {
+		cacheObjects, err := r.computeResourcesDataForRegistryCache(ctx, &cache, serviceAccountName, i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compute resources for upstream %s: %w", cache.Upstream, err)
 		}
@@ -264,7 +264,7 @@ func (r *registryCaches) computeResourcesData(ctx context.Context) (map[string][
 	return registry.AddAllAndSerialize(objects...)
 }
 
-func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Context, cache *api.RegistryCache, serviceAccountName string) ([]client.Object, error) {
+func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Context, cache *api.RegistryCache, serviceAccountName string, index int) ([]client.Object, error) {
 	if cache.Volume == nil || cache.Volume.Size == nil {
 		return nil, fmt.Errorf("registry cache volume size is required")
 	}
@@ -272,14 +272,14 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 	const (
 		registryCacheVolumeName  = "cache-volume"
 		registryConfigVolumeName = "config-volume"
-		debugPort                = 5001
+		debugPort                = 5500
 	)
 
 	var (
 		name         = strings.Replace(fmt.Sprintf("registry-%s", cache.Upstream), ".", "-", -1)
 		configValues = map[string]interface{}{
-			"http_addr":              fmt.Sprintf(":%d", constants.RegistryCachePort),
-			"http_debug_addr":        fmt.Sprintf(":%d", debugPort),
+			"http_addr":              fmt.Sprintf(":%d", constants.RegistryCachePort+index),
+			"http_debug_addr":        fmt.Sprintf(":%d", debugPort+index),
 			"proxy_remoteurl":        registryutils.GetUpstreamURL(cache.Upstream),
 			"storage_delete_enabled": strconv.FormatBool(helper.GarbageCollectionEnabled(cache)),
 		}
@@ -337,11 +337,11 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 			Selector: getLabels(name, cache.Upstream),
 			Ports: []corev1.ServicePort{{
 				Name:       "registry-cache",
-				Port:       constants.RegistryCachePort,
+				Port:       int32(constants.RegistryCachePort + index),
 				Protocol:   corev1.ProtocolTCP,
 				TargetPort: intstr.FromString("registry-cache"),
 			}},
-			Type: corev1.ServiceTypeClusterIP,
+			Type: corev1.ServiceTypeNodePort,
 		},
 	}
 
@@ -386,11 +386,11 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 							},
 							Ports: []corev1.ContainerPort{
 								{
-									ContainerPort: constants.RegistryCachePort,
+									ContainerPort: int32(constants.RegistryCachePort + index),
 									Name:          "registry-cache",
 								},
 								{
-									ContainerPort: debugPort,
+									ContainerPort: int32(debugPort + index),
 									Name:          "debug",
 								},
 							},
@@ -398,7 +398,7 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path: "/debug/health",
-										Port: intstr.FromInt32(debugPort),
+										Port: intstr.FromInt32(int32(debugPort + index)),
 									},
 								},
 								FailureThreshold: 6,
@@ -409,7 +409,7 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path: "/debug/health",
-										Port: intstr.FromInt32(debugPort),
+										Port: intstr.FromInt32(int32(debugPort + index)),
 									},
 								},
 								FailureThreshold: 3,
@@ -429,6 +429,7 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 							},
 						},
 					},
+					HostNetwork: true,
 					Volumes: []corev1.Volume{
 						{
 							Name: registryConfigVolumeName,

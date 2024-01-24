@@ -75,4 +75,6 @@ type RegistryCacheStatus struct {
 	// Endpoint is the registry cache endpoint.
 	// Example: "http://10.4.246.205:5000"
 	Endpoint string
+	//NodePort
+	NodePort int32
 }

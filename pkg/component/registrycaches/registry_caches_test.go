@@ -194,7 +194,7 @@ spec:
   selector:
     app: ` + name + `
     upstream-host: ` + upstream + `
-  type: ClusterIP
+  type: NodePort
 status:
   loadBalancer: {}
 `

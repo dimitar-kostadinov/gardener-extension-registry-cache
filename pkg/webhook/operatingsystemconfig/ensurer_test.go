@@ -16,8 +16,9 @@ package operatingsystemconfig_test
 
 import (
 	"context"
-	_ "embed"
-	"encoding/base64"
+	"fmt"
+
+	"path/filepath"
 	"testing"
 
 	extensionscontextwebhook "github.com/gardener/gardener/extensions/pkg/webhook/context"
@@ -35,8 +36,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/gardener/gardener-extension-registry-cache/pkg/apis/registry"
 	registryinstall "github.com/gardener/gardener-extension-registry-cache/pkg/apis/registry/install"
-	"github.com/gardener/gardener-extension-registry-cache/pkg/apis/registry/v1alpha1"
 	"github.com/gardener/gardener-extension-registry-cache/pkg/webhook/operatingsystemconfig"
 )
 
@@ -44,11 +45,6 @@ func TestOperatingSystemConfigWebhook(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "OperatingSystemConfig Webhook Suite")
 }
-
-var (
-	//go:embed scripts/configure-containerd-registries.sh
-	configureContainerdRegistriesScript string
-)
 
 var _ = Describe("Ensurer", func() {
 	var (
@@ -78,36 +74,6 @@ var _ = Describe("Ensurer", func() {
 
 		BeforeEach(func() {
 			files = []extensionsv1alpha1.File{oldFile}
-
-		})
-
-		It("should add additional files to the current ones", func() {
-			ensurer := operatingsystemconfig.NewEnsurer(fakeClient, decoder, logger)
-
-			Expect(ensurer.EnsureAdditionalFiles(ctx, nil, &files, nil)).To(Succeed())
-			Expect(files).To(ConsistOf(oldFile, configureContainerdRegistriesFile(configureContainerdRegistriesScript)))
-		})
-
-		It("should overwrite existing files of the current ones", func() {
-			ensurer := operatingsystemconfig.NewEnsurer(fakeClient, decoder, logger)
-
-			files = append(files, configureContainerdRegistriesFile("echo 'foo'"))
-
-			Expect(ensurer.EnsureAdditionalFiles(ctx, nil, &files, nil)).To(Succeed())
-			Expect(files).To(ConsistOf(oldFile, configureContainerdRegistriesFile(configureContainerdRegistriesScript)))
-		})
-	})
-
-	Describe("#EnsureAdditionalUnits", func() {
-		var (
-			oldUnit = extensionsv1alpha1.Unit{
-				Name: "foo.service",
-			}
-			units []extensionsv1alpha1.Unit
-		)
-
-		BeforeEach(func() {
-			units = []extensionsv1alpha1.Unit{oldUnit}
 		})
 
 		It("should return err when it fails to get the cluster", func() {
@@ -120,7 +86,7 @@ var _ = Describe("Ensurer", func() {
 
 			ensurer := operatingsystemconfig.NewEnsurer(fakeClient, decoder, logger)
 
-			err := ensurer.EnsureAdditionalUnits(ctx, gctx, &units, nil)
+			err := ensurer.EnsureAdditionalFiles(ctx, gctx, &files, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(ContainSubstring("failed to get the cluster resource: could not get cluster for namespace 'shoot--foo--bar'")))
 		})
@@ -138,8 +104,8 @@ var _ = Describe("Ensurer", func() {
 
 			ensurer := operatingsystemconfig.NewEnsurer(fakeClient, decoder, logger)
 
-			Expect(ensurer.EnsureAdditionalUnits(ctx, gctx, &units, nil)).To(Succeed())
-			Expect(units).To(ConsistOf(oldUnit))
+			Expect(ensurer.EnsureAdditionalFiles(ctx, gctx, &files, nil)).To(Succeed())
+			Expect(files).To(ConsistOf(oldFile))
 		})
 
 		It("should do nothing if hibernation is enabled for Shoot", func() {
@@ -156,8 +122,8 @@ var _ = Describe("Ensurer", func() {
 
 			ensurer := operatingsystemconfig.NewEnsurer(fakeClient, decoder, logger)
 
-			Expect(ensurer.EnsureAdditionalUnits(ctx, gctx, &units, nil)).To(Succeed())
-			Expect(units).To(ConsistOf(oldUnit))
+			Expect(ensurer.EnsureAdditionalFiles(ctx, gctx, &files, nil)).To(Succeed())
+			Expect(files).To(ConsistOf(oldFile))
 		})
 
 		It("return err when it fails to get the extesion", func() {
@@ -169,7 +135,7 @@ var _ = Describe("Ensurer", func() {
 
 			ensurer := operatingsystemconfig.NewEnsurer(fakeClient, decoder, logger)
 
-			err := ensurer.EnsureAdditionalUnits(ctx, gctx, &units, nil)
+			err := ensurer.EnsureAdditionalFiles(ctx, gctx, &files, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(ContainSubstring("failed to get extension 'shoot--foo--bar/registry-cache'")))
 		})
@@ -196,7 +162,7 @@ var _ = Describe("Ensurer", func() {
 
 			ensurer := operatingsystemconfig.NewEnsurer(fakeClient, decoder, logger)
 
-			err := ensurer.EnsureAdditionalUnits(ctx, gctx, &units, nil)
+			err := ensurer.EnsureAdditionalFiles(ctx, gctx, &files, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(ContainSubstring("extension 'shoot--foo--bar/registry-cache' does not have a .status.providerStatus specified")))
 		})
@@ -225,12 +191,12 @@ var _ = Describe("Ensurer", func() {
 
 			ensurer := operatingsystemconfig.NewEnsurer(fakeClient, decoder, logger)
 
-			err := ensurer.EnsureAdditionalUnits(ctx, gctx, &units, nil)
+			err := ensurer.EnsureAdditionalFiles(ctx, gctx, &files, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(ContainSubstring("failed to decode providerStatus of extension 'shoot--foo--bar/registry-cache'")))
 		})
 
-		It("should add additional unit to the current ones", func() {
+		It("should add additional files to the current ones", func() {
 			cluster := &extensions.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "shoot--foo--bar"},
 				Shoot:      &gardencorev1beta1.Shoot{},
@@ -245,19 +211,15 @@ var _ = Describe("Ensurer", func() {
 				Status: extensionsv1alpha1.ExtensionStatus{
 					DefaultStatus: extensionsv1alpha1.DefaultStatus{
 						ProviderStatus: &runtime.RawExtension{
-							Object: &v1alpha1.RegistryStatus{
-								TypeMeta: metav1.TypeMeta{
-									APIVersion: v1alpha1.SchemeGroupVersion.String(),
-									Kind:       "RegistryStatus",
-								},
-								Caches: []v1alpha1.RegistryCacheStatus{
+							Object: &registry.RegistryStatus{
+								Caches: []registry.RegistryCacheStatus{
 									{
 										Upstream: "docker.io",
-										Endpoint: "http://10.0.0.1:5000",
+										NodePort: 31001,
 									},
 									{
-										Upstream: "europe-docker.pkg.dev",
-										Endpoint: "http://10.0.0.2:5000",
+										Upstream: "eu.gcr.io",
+										NodePort: 31002,
 									},
 								},
 							},
@@ -269,13 +231,14 @@ var _ = Describe("Ensurer", func() {
 
 			ensurer := operatingsystemconfig.NewEnsurer(fakeClient, decoder, logger)
 
-			Expect(ensurer.EnsureAdditionalUnits(ctx, gctx, &units, nil)).To(Succeed())
-			Expect(units).To(ConsistOf(oldUnit,
-				configureContainerdRegistriesUnit("docker.io,http://10.0.0.1:5000,https://registry-1.docker.io europe-docker.pkg.dev,http://10.0.0.2:5000,https://europe-docker.pkg.dev"),
+			Expect(ensurer.EnsureAdditionalFiles(ctx, gctx, &files, nil)).To(Succeed())
+			Expect(files).To(ConsistOf(oldFile,
+				hostsTOMLFile("docker.io", "https://registry-1.docker.io", 31001),
+				hostsTOMLFile("eu.gcr.io", "https://eu.gcr.io", 31002),
 			))
 		})
 
-		It("should overwrite existing unit of the current ones", func() {
+		It("should overwrite existing files of the current ones", func() {
 			cluster := &extensions.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "shoot--foo--bar"},
 				Shoot:      &gardencorev1beta1.Shoot{},
@@ -290,19 +253,15 @@ var _ = Describe("Ensurer", func() {
 				Status: extensionsv1alpha1.ExtensionStatus{
 					DefaultStatus: extensionsv1alpha1.DefaultStatus{
 						ProviderStatus: &runtime.RawExtension{
-							Object: &v1alpha1.RegistryStatus{
-								TypeMeta: metav1.TypeMeta{
-									APIVersion: v1alpha1.SchemeGroupVersion.String(),
-									Kind:       "RegistryStatus",
-								},
-								Caches: []v1alpha1.RegistryCacheStatus{
+							Object: &registry.RegistryStatus{
+								Caches: []registry.RegistryCacheStatus{
 									{
 										Upstream: "docker.io",
-										Endpoint: "http://10.0.0.1:5000",
+										NodePort: 31001,
 									},
 									{
-										Upstream: "europe-docker.pkg.dev",
-										Endpoint: "http://10.0.0.2:5000",
+										Upstream: "eu.gcr.io",
+										NodePort: 31002,
 									},
 								},
 							},
@@ -314,48 +273,34 @@ var _ = Describe("Ensurer", func() {
 
 			ensurer := operatingsystemconfig.NewEnsurer(fakeClient, decoder, logger)
 
-			units = append(units,
-				configureContainerdRegistriesUnit("docker.io,foo,bar"),
+			files = append(files,
+				hostsTOMLFile("docker.io", "foo", 10),
+				hostsTOMLFile("eu.gcr.io", "baz", 20),
 			)
 
-			Expect(ensurer.EnsureAdditionalUnits(ctx, gctx, &units, nil)).To(Succeed())
-			Expect(units).To(ConsistOf(oldUnit,
-				configureContainerdRegistriesUnit("docker.io,http://10.0.0.1:5000,https://registry-1.docker.io europe-docker.pkg.dev,http://10.0.0.2:5000,https://europe-docker.pkg.dev"),
+			Expect(ensurer.EnsureAdditionalFiles(ctx, gctx, &files, nil)).To(Succeed())
+			Expect(files).To(ConsistOf(oldFile,
+				hostsTOMLFile("docker.io", "https://registry-1.docker.io", 31001),
+				hostsTOMLFile("eu.gcr.io", "https://eu.gcr.io", 31002),
 			))
 		})
 	})
 })
 
-func configureContainerdRegistriesFile(script string) extensionsv1alpha1.File {
+func hostsTOMLFile(upstream, upstreamServer string, nodePort int32) extensionsv1alpha1.File {
 	return extensionsv1alpha1.File{
-		Path:        "/opt/bin/configure-containerd-registries.sh",
-		Permissions: pointer.Int32(0744),
+		Path:        filepath.Join("/etc/containerd/certs.d/", upstream, "hosts.toml"),
+		Permissions: pointer.Int32(0644),
 		Content: extensionsv1alpha1.FileContent{
 			Inline: &extensionsv1alpha1.FileContentInline{
-				Encoding: "b64",
-				Data:     base64.StdEncoding.EncodeToString([]byte(script)),
+				Data: fmt.Sprintf(`server = "%[1]s"
+
+[host."http://127.0.0.1:%[2]d"]
+  capabilities = ["pull", "resolve"]
+[host."%[1]s"]
+  capabilities = ["pull", "resolve"]
+`, upstreamServer, nodePort),
 			},
 		},
-	}
-}
-
-func configureContainerdRegistriesUnit(args string) extensionsv1alpha1.Unit {
-	return extensionsv1alpha1.Unit{
-		Name:    "configure-containerd-registries.service",
-		Command: extensionsv1alpha1.UnitCommandPtr(extensionsv1alpha1.CommandStart),
-		Enable:  pointer.Bool(true),
-		Content: pointer.String(`[Unit]
-Description=Configures containerd registries
-
-[Install]
-WantedBy=multi-user.target
-
-[Unit]
-After=containerd.service
-Requires=containerd.service
-
-[Service]
-Type=simple
-ExecStart=/opt/bin/configure-containerd-registries.sh ` + args),
 	}
 }

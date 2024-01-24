@@ -152,6 +152,17 @@ string
 Example: &ldquo;<a href="http://10.4.246.205:5000&quot;">http://10.4.246.205:5000&rdquo;</a></p>
 </td>
 </tr>
+<tr>
+<td>
+<code>nodePort</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<p>NodePort</p>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="registry.extensions.gardener.cloud/v1alpha2.RegistryConfig">RegistryConfig
