@@ -15,42 +15,23 @@
 package registrycaches
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
-	"strconv"
-	"strings"
 	"text/template"
 	"time"
 
-	"github.com/gardener/gardener/extensions/pkg/controller"
 	gardencorev1beta1 "github.com/gardener/gardener/pkg/apis/core/v1beta1"
-	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
-	v1beta1helper "github.com/gardener/gardener/pkg/apis/core/v1beta1/helper"
-	resourcesv1alpha1 "github.com/gardener/gardener/pkg/apis/resources/v1alpha1"
 	"github.com/gardener/gardener/pkg/client/kubernetes"
 	"github.com/gardener/gardener/pkg/component"
-	"github.com/gardener/gardener/pkg/utils"
-	kubernetesutils "github.com/gardener/gardener/pkg/utils/kubernetes"
 	"github.com/gardener/gardener/pkg/utils/managedresources"
-	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	vpaautoscalingv1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
-	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/gardener/gardener-extension-registry-cache/pkg/apis/registry"
-	"github.com/gardener/gardener-extension-registry-cache/pkg/apis/registry/helper"
 	"github.com/gardener/gardener-extension-registry-cache/pkg/constants"
-	registryutils "github.com/gardener/gardener-extension-registry-cache/pkg/utils/registry"
 )
 
 const (
@@ -172,345 +153,351 @@ func (r *registryCaches) WaitCleanup(ctx context.Context) error {
 func (r *registryCaches) computeResourcesData(ctx context.Context) (map[string][]byte, error) {
 	var objects []client.Object
 
-	serviceAccountName := "default"
-	if !r.values.PSPDisabled {
-		serviceAccountName = "registry-cache"
+	//serviceAccountName := "default"
+	//if !r.values.PSPDisabled {
+	//	serviceAccountName = "registry-cache"
+	//
+	//	serviceAccount := &corev1.ServiceAccount{
+	//		ObjectMeta: metav1.ObjectMeta{
+	//			Name:      serviceAccountName,
+	//			Namespace: metav1.NamespaceSystem,
+	//		},
+	//		AutomountServiceAccountToken: pointer.Bool(false),
+	//	}
+	//	podSecurityPolicy := &policyv1beta1.PodSecurityPolicy{
+	//		ObjectMeta: metav1.ObjectMeta{
+	//			Name: "gardener.kube-system.registry-cache",
+	//			Annotations: map[string]string{
+	//				v1beta1constants.AnnotationSeccompDefaultProfile:  v1beta1constants.AnnotationSeccompAllowedProfilesRuntimeDefaultValue,
+	//				v1beta1constants.AnnotationSeccompAllowedProfiles: v1beta1constants.AnnotationSeccompAllowedProfilesRuntimeDefaultValue,
+	//			},
+	//		},
+	//		Spec: policyv1beta1.PodSecurityPolicySpec{
+	//			RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
+	//				Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
+	//			},
+	//			SELinux: policyv1beta1.SELinuxStrategyOptions{
+	//				Rule: policyv1beta1.SELinuxStrategyRunAsAny,
+	//			},
+	//			SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
+	//				Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
+	//			},
+	//			FSGroup: policyv1beta1.FSGroupStrategyOptions{
+	//				Rule: policyv1beta1.FSGroupStrategyRunAsAny,
+	//			},
+	//			Volumes: []policyv1beta1.FSType{
+	//				policyv1beta1.PersistentVolumeClaim,
+	//			},
+	//		},
+	//	}
+	//	clusterRolePSP := &rbacv1.ClusterRole{
+	//		ObjectMeta: metav1.ObjectMeta{
+	//			Name: "gardener.cloud:psp:kube-system:registry-cache",
+	//		},
+	//		Rules: []rbacv1.PolicyRule{
+	//			{
+	//				APIGroups:     []string{"policy", "extensions"},
+	//				ResourceNames: []string{podSecurityPolicy.Name},
+	//				Resources:     []string{"podsecuritypolicies"},
+	//				Verbs:         []string{"use"},
+	//			},
+	//		},
+	//	}
+	//	roleBindingPSP := &rbacv1.RoleBinding{
+	//		ObjectMeta: metav1.ObjectMeta{
+	//			Name:      "gardener.cloud:psp:registry-cache",
+	//			Namespace: metav1.NamespaceSystem,
+	//			Annotations: map[string]string{
+	//				resourcesv1alpha1.DeleteOnInvalidUpdate: "true",
+	//			},
+	//		},
+	//		RoleRef: rbacv1.RoleRef{
+	//			APIGroup: rbacv1.GroupName,
+	//			Kind:     "ClusterRole",
+	//			Name:     clusterRolePSP.Name,
+	//		},
+	//		Subjects: []rbacv1.Subject{{
+	//			Kind:      rbacv1.ServiceAccountKind,
+	//			Name:      serviceAccount.Name,
+	//			Namespace: serviceAccount.Namespace,
+	//		}},
+	//	}
+	//
+	//	objects = append(objects,
+	//		serviceAccount,
+	//		podSecurityPolicy,
+	//		clusterRolePSP,
+	//		roleBindingPSP,
+	//	)
+	//}
 
-		serviceAccount := &corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      serviceAccountName,
-				Namespace: metav1.NamespaceSystem,
-			},
-			AutomountServiceAccountToken: pointer.Bool(false),
-		}
-		podSecurityPolicy := &policyv1beta1.PodSecurityPolicy{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "gardener.kube-system.registry-cache",
-				Annotations: map[string]string{
-					v1beta1constants.AnnotationSeccompDefaultProfile:  v1beta1constants.AnnotationSeccompAllowedProfilesRuntimeDefaultValue,
-					v1beta1constants.AnnotationSeccompAllowedProfiles: v1beta1constants.AnnotationSeccompAllowedProfilesRuntimeDefaultValue,
-				},
-			},
-			Spec: policyv1beta1.PodSecurityPolicySpec{
-				RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
-					Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-				},
-				SELinux: policyv1beta1.SELinuxStrategyOptions{
-					Rule: policyv1beta1.SELinuxStrategyRunAsAny,
-				},
-				SupplementalGroups: policyv1beta1.SupplementalGroupsStrategyOptions{
-					Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
-				},
-				FSGroup: policyv1beta1.FSGroupStrategyOptions{
-					Rule: policyv1beta1.FSGroupStrategyRunAsAny,
-				},
-				Volumes: []policyv1beta1.FSType{
-					policyv1beta1.PersistentVolumeClaim,
-				},
-			},
-		}
-		clusterRolePSP := &rbacv1.ClusterRole{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "gardener.cloud:psp:kube-system:registry-cache",
-			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups:     []string{"policy", "extensions"},
-					ResourceNames: []string{podSecurityPolicy.Name},
-					Resources:     []string{"podsecuritypolicies"},
-					Verbs:         []string{"use"},
-				},
-			},
-		}
-		roleBindingPSP := &rbacv1.RoleBinding{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "gardener.cloud:psp:registry-cache",
-				Namespace: metav1.NamespaceSystem,
-				Annotations: map[string]string{
-					resourcesv1alpha1.DeleteOnInvalidUpdate: "true",
-				},
-			},
-			RoleRef: rbacv1.RoleRef{
-				APIGroup: rbacv1.GroupName,
-				Kind:     "ClusterRole",
-				Name:     clusterRolePSP.Name,
-			},
-			Subjects: []rbacv1.Subject{{
-				Kind:      rbacv1.ServiceAccountKind,
-				Name:      serviceAccount.Name,
-				Namespace: serviceAccount.Namespace,
-			}},
-		}
+	//for i, cache := range r.values.Caches {
+	//	cacheObjects, err := r.computeResourcesDataForRegistryCache(ctx, &cache, serviceAccountName, i)
+	//	if err != nil {
+	//		return nil, fmt.Errorf("failed to compute resources for upstream %s: %w", cache.Upstream, err)
+	//	}
+	//
+	//	objects = append(objects, cacheObjects...)
+	//}
 
-		objects = append(objects,
-			serviceAccount,
-			podSecurityPolicy,
-			clusterRolePSP,
-			roleBindingPSP,
-		)
-	}
-
-	for i, cache := range r.values.Caches {
-		cacheObjects, err := r.computeResourcesDataForRegistryCache(ctx, &cache, serviceAccountName, i)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compute resources for upstream %s: %w", cache.Upstream, err)
-		}
-
-		objects = append(objects, cacheObjects...)
-	}
+	objects = append(objects, &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test",
+		},
+	})
 
 	registry := managedresources.NewRegistry(kubernetes.ShootScheme, kubernetes.ShootCodec, kubernetes.ShootSerializer)
 
 	return registry.AddAllAndSerialize(objects...)
 }
 
-func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Context, cache *api.RegistryCache, serviceAccountName string, index int) ([]client.Object, error) {
-	if cache.Volume == nil || cache.Volume.Size == nil {
-		return nil, fmt.Errorf("registry cache volume size is required")
-	}
+//func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Context, cache *api.RegistryCache, serviceAccountName string, index int) ([]client.Object, error) {
+//	if cache.Volume == nil || cache.Volume.Size == nil {
+//		return nil, fmt.Errorf("registry cache volume size is required")
+//	}
+//
+//	const (
+//		registryCacheVolumeName  = "cache-volume"
+//		registryConfigVolumeName = "config-volume"
+//		debugPort                = 5500
+//	)
+//
+//	var (
+//		name         = strings.Replace(fmt.Sprintf("registry-%s", cache.Upstream), ".", "-", -1)
+//		configValues = map[string]interface{}{
+//			"http_addr":              fmt.Sprintf(":%d", constants.RegistryCachePort+index),
+//			"http_debug_addr":        fmt.Sprintf(":%d", debugPort+index),
+//			"proxy_remoteurl":        registryutils.GetUpstreamURL(cache.Upstream),
+//			"storage_delete_enabled": strconv.FormatBool(helper.GarbageCollectionEnabled(cache)),
+//		}
+//	)
+//
+//	var storageClassName *string
+//	if cache.Volume != nil {
+//		storageClassName = cache.Volume.StorageClassName
+//	}
+//
+//	if cache.SecretReferenceName != nil {
+//		ref := v1beta1helper.GetResourceByName(r.values.ResourceReferences, *cache.SecretReferenceName)
+//		if ref == nil || ref.ResourceRef.Kind != "Secret" {
+//			return nil, fmt.Errorf("failed to find referenced resource with name %s and kind Secret", *cache.SecretReferenceName)
+//		}
+//
+//		refSecret := &corev1.Secret{
+//			ObjectMeta: metav1.ObjectMeta{
+//				Name:      ref.ResourceRef.Name,
+//				Namespace: r.namespace,
+//			},
+//		}
+//		if err := controller.GetObjectByReference(ctx, r.client, &ref.ResourceRef, r.namespace, refSecret); err != nil {
+//			return nil, fmt.Errorf("failed to read referenced secret %s%s for reference %s", v1beta1constants.ReferencedResourcesPrefix, ref.ResourceRef.Name, *cache.SecretReferenceName)
+//		}
+//
+//		configValues["proxy_username"] = string(refSecret.Data["username"])
+//		configValues["proxy_password"] = string(refSecret.Data["password"])
+//	}
+//
+//	var configYAML bytes.Buffer
+//	if err := configTpl.Execute(&configYAML, configValues); err != nil {
+//		return nil, err
+//	}
+//
+//	configSecret := &corev1.Secret{
+//		ObjectMeta: metav1.ObjectMeta{
+//			Name:      name + "-config",
+//			Namespace: metav1.NamespaceSystem,
+//			Labels:    getLabels(name, cache.Upstream),
+//		},
+//		Data: map[string][]byte{
+//			"config.yml": configYAML.Bytes(),
+//		},
+//	}
+//	utilruntime.Must(kubernetesutils.MakeUnique(configSecret))
+//
+//	service := &corev1.Service{
+//		ObjectMeta: metav1.ObjectMeta{
+//			Name:      name,
+//			Namespace: metav1.NamespaceSystem,
+//			Labels:    getLabels(name, cache.Upstream),
+//		},
+//		Spec: corev1.ServiceSpec{
+//			Selector: getLabels(name, cache.Upstream),
+//			Ports: []corev1.ServicePort{{
+//				Name:       "registry-cache",
+//				Port:       int32(constants.RegistryCachePort + index),
+//				Protocol:   corev1.ProtocolTCP,
+//				TargetPort: intstr.FromString("registry-cache"),
+//			}},
+//			Type: corev1.ServiceTypeNodePort,
+//		},
+//	}
+//
+//	statefulSet := &appsv1.StatefulSet{
+//		ObjectMeta: metav1.ObjectMeta{
+//			Name:      name,
+//			Namespace: metav1.NamespaceSystem,
+//			Labels:    getLabels(name, cache.Upstream),
+//		},
+//		Spec: appsv1.StatefulSetSpec{
+//			ServiceName: service.Name,
+//			Selector: &metav1.LabelSelector{
+//				MatchLabels: getLabels(name, cache.Upstream),
+//			},
+//			Replicas: pointer.Int32(1),
+//			Template: corev1.PodTemplateSpec{
+//				ObjectMeta: metav1.ObjectMeta{
+//					Labels: utils.MergeStringMaps(getLabels(name, cache.Upstream), map[string]string{
+//						v1beta1constants.LabelNetworkPolicyToDNS:            v1beta1constants.LabelNetworkPolicyAllowed,
+//						v1beta1constants.LabelNetworkPolicyToPublicNetworks: v1beta1constants.LabelNetworkPolicyAllowed,
+//					}),
+//				},
+//				Spec: corev1.PodSpec{
+//					AutomountServiceAccountToken: pointer.Bool(false),
+//					ServiceAccountName:           serviceAccountName,
+//					PriorityClassName:            "system-cluster-critical",
+//					SecurityContext: &corev1.PodSecurityContext{
+//						SeccompProfile: &corev1.SeccompProfile{
+//							Type: corev1.SeccompProfileTypeRuntimeDefault,
+//						},
+//					},
+//					Containers: []corev1.Container{
+//						{
+//							Name:            "registry-cache",
+//							Image:           r.values.Image,
+//							ImagePullPolicy: corev1.PullIfNotPresent,
+//							Resources: corev1.ResourceRequirements{
+//								Requests: corev1.ResourceList{
+//									corev1.ResourceCPU:    resource.MustParse("20m"),
+//									corev1.ResourceMemory: resource.MustParse("50Mi"),
+//								},
+//							},
+//							Ports: []corev1.ContainerPort{
+//								{
+//									ContainerPort: int32(constants.RegistryCachePort + index),
+//									Name:          "registry-cache",
+//								},
+//								{
+//									ContainerPort: int32(debugPort + index),
+//									Name:          "debug",
+//								},
+//							},
+//							LivenessProbe: &corev1.Probe{
+//								ProbeHandler: corev1.ProbeHandler{
+//									HTTPGet: &corev1.HTTPGetAction{
+//										Path: "/debug/health",
+//										Port: intstr.FromInt32(int32(debugPort + index)),
+//									},
+//								},
+//								FailureThreshold: 6,
+//								SuccessThreshold: 1,
+//								PeriodSeconds:    20,
+//							},
+//							ReadinessProbe: &corev1.Probe{
+//								ProbeHandler: corev1.ProbeHandler{
+//									HTTPGet: &corev1.HTTPGetAction{
+//										Path: "/debug/health",
+//										Port: intstr.FromInt32(int32(debugPort + index)),
+//									},
+//								},
+//								FailureThreshold: 3,
+//								SuccessThreshold: 1,
+//								PeriodSeconds:    20,
+//							},
+//							VolumeMounts: []corev1.VolumeMount{
+//								{
+//									Name:      registryCacheVolumeName,
+//									ReadOnly:  false,
+//									MountPath: "/var/lib/registry",
+//								},
+//								{
+//									Name:      registryConfigVolumeName,
+//									MountPath: "/etc/docker/registry",
+//								},
+//							},
+//						},
+//					},
+//					HostNetwork: true,
+//					Volumes: []corev1.Volume{
+//						{
+//							Name: registryConfigVolumeName,
+//							VolumeSource: corev1.VolumeSource{
+//								Secret: &corev1.SecretVolumeSource{
+//									SecretName: configSecret.Name,
+//								},
+//							},
+//						},
+//					},
+//				},
+//			},
+//			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+//				{
+//					ObjectMeta: metav1.ObjectMeta{
+//						Name:   registryCacheVolumeName,
+//						Labels: getLabels(name, cache.Upstream),
+//					},
+//					Spec: corev1.PersistentVolumeClaimSpec{
+//						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+//						Resources: corev1.ResourceRequirements{
+//							Requests: corev1.ResourceList{
+//								corev1.ResourceStorage: *cache.Volume.Size,
+//							},
+//						},
+//
+//						StorageClassName: storageClassName,
+//					},
+//				},
+//			},
+//		},
+//	}
+//
+//	var vpa *vpaautoscalingv1.VerticalPodAutoscaler
+//	if r.values.VPAEnabled {
+//		updateMode := vpaautoscalingv1.UpdateModeAuto
+//		controlledValues := vpaautoscalingv1.ContainerControlledValuesRequestsOnly
+//		vpa = &vpaautoscalingv1.VerticalPodAutoscaler{
+//			ObjectMeta: metav1.ObjectMeta{
+//				Name:      name,
+//				Namespace: metav1.NamespaceSystem,
+//			},
+//			Spec: vpaautoscalingv1.VerticalPodAutoscalerSpec{
+//				TargetRef: &autoscalingv1.CrossVersionObjectReference{
+//					APIVersion: appsv1.SchemeGroupVersion.String(),
+//					Kind:       "StatefulSet",
+//					Name:       name,
+//				},
+//				UpdatePolicy: &vpaautoscalingv1.PodUpdatePolicy{
+//					UpdateMode: &updateMode,
+//				},
+//				ResourcePolicy: &vpaautoscalingv1.PodResourcePolicy{
+//					ContainerPolicies: []vpaautoscalingv1.ContainerResourcePolicy{
+//						{
+//							ContainerName:    vpaautoscalingv1.DefaultContainerResourcePolicy,
+//							ControlledValues: &controlledValues,
+//							MinAllowed: corev1.ResourceList{
+//								corev1.ResourceMemory: resource.MustParse("20Mi"),
+//							},
+//							MaxAllowed: corev1.ResourceList{
+//								corev1.ResourceCPU:    resource.MustParse("4"),
+//								corev1.ResourceMemory: resource.MustParse("8Gi"),
+//							},
+//						},
+//					},
+//				},
+//			},
+//		}
+//	}
+//
+//	return []client.Object{
+//		configSecret,
+//		service,
+//		statefulSet,
+//		vpa,
+//	}, nil
+//}
 
-	const (
-		registryCacheVolumeName  = "cache-volume"
-		registryConfigVolumeName = "config-volume"
-		debugPort                = 5500
-	)
-
-	var (
-		name         = strings.Replace(fmt.Sprintf("registry-%s", cache.Upstream), ".", "-", -1)
-		configValues = map[string]interface{}{
-			"http_addr":              fmt.Sprintf(":%d", constants.RegistryCachePort+index),
-			"http_debug_addr":        fmt.Sprintf(":%d", debugPort+index),
-			"proxy_remoteurl":        registryutils.GetUpstreamURL(cache.Upstream),
-			"storage_delete_enabled": strconv.FormatBool(helper.GarbageCollectionEnabled(cache)),
-		}
-	)
-
-	var storageClassName *string
-	if cache.Volume != nil {
-		storageClassName = cache.Volume.StorageClassName
-	}
-
-	if cache.SecretReferenceName != nil {
-		ref := v1beta1helper.GetResourceByName(r.values.ResourceReferences, *cache.SecretReferenceName)
-		if ref == nil || ref.ResourceRef.Kind != "Secret" {
-			return nil, fmt.Errorf("failed to find referenced resource with name %s and kind Secret", *cache.SecretReferenceName)
-		}
-
-		refSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ref.ResourceRef.Name,
-				Namespace: r.namespace,
-			},
-		}
-		if err := controller.GetObjectByReference(ctx, r.client, &ref.ResourceRef, r.namespace, refSecret); err != nil {
-			return nil, fmt.Errorf("failed to read referenced secret %s%s for reference %s", v1beta1constants.ReferencedResourcesPrefix, ref.ResourceRef.Name, *cache.SecretReferenceName)
-		}
-
-		configValues["proxy_username"] = string(refSecret.Data["username"])
-		configValues["proxy_password"] = string(refSecret.Data["password"])
-	}
-
-	var configYAML bytes.Buffer
-	if err := configTpl.Execute(&configYAML, configValues); err != nil {
-		return nil, err
-	}
-
-	configSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name + "-config",
-			Namespace: metav1.NamespaceSystem,
-			Labels:    getLabels(name, cache.Upstream),
-		},
-		Data: map[string][]byte{
-			"config.yml": configYAML.Bytes(),
-		},
-	}
-	utilruntime.Must(kubernetesutils.MakeUnique(configSecret))
-
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: metav1.NamespaceSystem,
-			Labels:    getLabels(name, cache.Upstream),
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: getLabels(name, cache.Upstream),
-			Ports: []corev1.ServicePort{{
-				Name:       "registry-cache",
-				Port:       int32(constants.RegistryCachePort + index),
-				Protocol:   corev1.ProtocolTCP,
-				TargetPort: intstr.FromString("registry-cache"),
-			}},
-			Type: corev1.ServiceTypeNodePort,
-		},
-	}
-
-	statefulSet := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: metav1.NamespaceSystem,
-			Labels:    getLabels(name, cache.Upstream),
-		},
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: service.Name,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: getLabels(name, cache.Upstream),
-			},
-			Replicas: pointer.Int32(1),
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: utils.MergeStringMaps(getLabels(name, cache.Upstream), map[string]string{
-						v1beta1constants.LabelNetworkPolicyToDNS:            v1beta1constants.LabelNetworkPolicyAllowed,
-						v1beta1constants.LabelNetworkPolicyToPublicNetworks: v1beta1constants.LabelNetworkPolicyAllowed,
-					}),
-				},
-				Spec: corev1.PodSpec{
-					AutomountServiceAccountToken: pointer.Bool(false),
-					ServiceAccountName:           serviceAccountName,
-					PriorityClassName:            "system-cluster-critical",
-					SecurityContext: &corev1.PodSecurityContext{
-						SeccompProfile: &corev1.SeccompProfile{
-							Type: corev1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
-					Containers: []corev1.Container{
-						{
-							Name:            "registry-cache",
-							Image:           r.values.Image,
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("20m"),
-									corev1.ResourceMemory: resource.MustParse("50Mi"),
-								},
-							},
-							Ports: []corev1.ContainerPort{
-								{
-									ContainerPort: int32(constants.RegistryCachePort + index),
-									Name:          "registry-cache",
-								},
-								{
-									ContainerPort: int32(debugPort + index),
-									Name:          "debug",
-								},
-							},
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/debug/health",
-										Port: intstr.FromInt32(int32(debugPort + index)),
-									},
-								},
-								FailureThreshold: 6,
-								SuccessThreshold: 1,
-								PeriodSeconds:    20,
-							},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/debug/health",
-										Port: intstr.FromInt32(int32(debugPort + index)),
-									},
-								},
-								FailureThreshold: 3,
-								SuccessThreshold: 1,
-								PeriodSeconds:    20,
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      registryCacheVolumeName,
-									ReadOnly:  false,
-									MountPath: "/var/lib/registry",
-								},
-								{
-									Name:      registryConfigVolumeName,
-									MountPath: "/etc/docker/registry",
-								},
-							},
-						},
-					},
-					HostNetwork: true,
-					Volumes: []corev1.Volume{
-						{
-							Name: registryConfigVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: configSecret.Name,
-								},
-							},
-						},
-					},
-				},
-			},
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   registryCacheVolumeName,
-						Labels: getLabels(name, cache.Upstream),
-					},
-					Spec: corev1.PersistentVolumeClaimSpec{
-						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceStorage: *cache.Volume.Size,
-							},
-						},
-
-						StorageClassName: storageClassName,
-					},
-				},
-			},
-		},
-	}
-
-	var vpa *vpaautoscalingv1.VerticalPodAutoscaler
-	if r.values.VPAEnabled {
-		updateMode := vpaautoscalingv1.UpdateModeAuto
-		controlledValues := vpaautoscalingv1.ContainerControlledValuesRequestsOnly
-		vpa = &vpaautoscalingv1.VerticalPodAutoscaler{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: metav1.NamespaceSystem,
-			},
-			Spec: vpaautoscalingv1.VerticalPodAutoscalerSpec{
-				TargetRef: &autoscalingv1.CrossVersionObjectReference{
-					APIVersion: appsv1.SchemeGroupVersion.String(),
-					Kind:       "StatefulSet",
-					Name:       name,
-				},
-				UpdatePolicy: &vpaautoscalingv1.PodUpdatePolicy{
-					UpdateMode: &updateMode,
-				},
-				ResourcePolicy: &vpaautoscalingv1.PodResourcePolicy{
-					ContainerPolicies: []vpaautoscalingv1.ContainerResourcePolicy{
-						{
-							ContainerName:    vpaautoscalingv1.DefaultContainerResourcePolicy,
-							ControlledValues: &controlledValues,
-							MinAllowed: corev1.ResourceList{
-								corev1.ResourceMemory: resource.MustParse("20Mi"),
-							},
-							MaxAllowed: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("4"),
-								corev1.ResourceMemory: resource.MustParse("8Gi"),
-							},
-						},
-					},
-				},
-			},
-		}
-	}
-
-	return []client.Object{
-		configSecret,
-		service,
-		statefulSet,
-		vpa,
-	}, nil
-}
-
-func getLabels(name, upstream string) map[string]string {
-	return map[string]string{
-		"app":                       name,
-		constants.UpstreamHostLabel: upstream,
-	}
-}
+//func getLabels(name, upstream string) map[string]string {
+//	return map[string]string{
+//		"app":                       name,
+//		constants.UpstreamHostLabel: upstream,
+//	}
+//}

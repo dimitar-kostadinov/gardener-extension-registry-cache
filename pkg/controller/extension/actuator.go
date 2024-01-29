@@ -18,15 +18,12 @@ import (
 	"context"
 	"fmt"
 
-	extensionsconfig "github.com/gardener/gardener/extensions/pkg/apis/config"
 	extensionscontroller "github.com/gardener/gardener/extensions/pkg/controller"
 	"github.com/gardener/gardener/extensions/pkg/controller/extension"
-	"github.com/gardener/gardener/extensions/pkg/util"
 	v1beta1helper "github.com/gardener/gardener/pkg/apis/core/v1beta1/helper"
 	extensionsv1alpha1 "github.com/gardener/gardener/pkg/apis/extensions/v1alpha1"
 	"github.com/gardener/gardener/pkg/component"
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -153,10 +150,10 @@ func (a *actuator) ForceDelete(ctx context.Context, _ logr.Logger, ex *extension
 
 func (a *actuator) computeProviderStatus(ctx context.Context, registryConfig *api.RegistryConfig, namespace string) (*v1alpha2.RegistryStatus, error) {
 	// get service IPs from shoot
-	_, shootClient, err := util.NewClientForShoot(ctx, a.client, namespace, client.Options{}, extensionsconfig.RESTOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create shoot client: %w", err)
-	}
+	//_, shootClient, err := util.NewClientForShoot(ctx, a.client, namespace, client.Options{}, extensionsconfig.RESTOptions{})
+	//if err != nil {
+	//	return nil, fmt.Errorf("failed to create shoot client: %w", err)
+	//}
 
 	selector := labels.NewSelector()
 	r, err := labels.NewRequirement(constants.UpstreamHostLabel, selection.Exists, nil)
@@ -166,21 +163,21 @@ func (a *actuator) computeProviderStatus(ctx context.Context, registryConfig *ap
 	selector = selector.Add(*r)
 
 	// get all registry cache services
-	services := &corev1.ServiceList{}
-	if err := shootClient.List(ctx, services, client.InNamespace(metav1.NamespaceSystem), client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		return nil, fmt.Errorf("failed to read services from shoot: %w", err)
-	}
+	//services := &corev1.ServiceList{}
+	//if err := shootClient.List(ctx, services, client.InNamespace(metav1.NamespaceSystem), client.MatchingLabelsSelector{Selector: selector}); err != nil {
+	//	return nil, fmt.Errorf("failed to read services from shoot: %w", err)
+	//}
 
-	if len(services.Items) != len(registryConfig.Caches) {
-		return nil, fmt.Errorf("not all services for all configured caches exist")
-	}
+	//if len(services.Items) != len(registryConfig.Caches) {
+	//	return nil, fmt.Errorf("not all services for all configured caches exist")
+	//}
 
 	caches := []v1alpha2.RegistryCacheStatus{}
-	for _, service := range services.Items {
+	for _, cache := range registryConfig.Caches {
 		caches = append(caches, v1alpha2.RegistryCacheStatus{
-			Upstream: service.Labels[constants.UpstreamHostLabel],
-			Endpoint: fmt.Sprintf("http://%s:%d", service.Spec.ClusterIP, constants.RegistryCachePort),
-			NodePort: service.Spec.Ports[0].NodePort,
+			Upstream: cache.Upstream, //service.Labels[constants.UpstreamHostLabel],
+			Endpoint: fmt.Sprintf("http://%s:%d", "127.0.0.1", 65001),
+			NodePort: 65001, //service.Spec.Ports[0].NodePort,
 		})
 	}
 

@@ -33,13 +33,13 @@ import (
 	registryutils "github.com/gardener/gardener-extension-registry-cache/pkg/utils/registry"
 )
 
-const hostsTOMLTemplate = `server = "%[1]s"
-
-[host."http://127.0.0.1:%[2]d"]
- capabilities = ["pull", "resolve"]
-[host."%[1]s"]
- capabilities = ["pull", "resolve"]
-`
+//const hostsTOMLTemplate = `server = "`%[1]s`"
+//
+//[host."http://127.0.0.1:%[2]d"]
+// capabilities = ["pull", "resolve"]
+//[host."%[1]s"]
+// capabilities = ["pull", "resolve"]
+//`
 
 //const hostsTOMLTemplate = `server = "%[1]s"
 //
@@ -48,6 +48,15 @@ const hostsTOMLTemplate = `server = "%[1]s"
 //[host."%[1]s"]
 //  capabilities = ["pull", "resolve"]
 //`
+
+const hostsTOMLTemplate = `server = "%[1]s"
+[host."http://127.0.0.1:65001"]
+ capabilities = ["pull", "resolve"]
+[host."http://127.0.0.1:65001".header]
+ X-Dragonfly-Registry = ["%[1]s"]
+[host."%[1]s"]
+ capabilities = ["pull", "resolve"]
+`
 
 const (
 	// containerdRegistryHostsDirectory is a directory that is created by the containerd-inializer systemd service.
@@ -117,7 +126,7 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx gcontext.Garde
 			Permissions: pointer.Int32(0644),
 			Content: extensionsv1alpha1.FileContent{
 				Inline: &extensionsv1alpha1.FileContentInline{
-					Data: fmt.Sprintf(hostsTOMLTemplate, upstreamURL, cache.NodePort),
+					Data: fmt.Sprintf(hostsTOMLTemplate, upstreamURL), //, cache.NodePort),
 				},
 			},
 		})
