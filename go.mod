@@ -1,9 +1,10 @@
 module github.com/gardener/gardener-extension-registry-cache
 
-go 1.22.0
+go 1.22.4
+
+toolchain go1.22.5
 
 require (
-	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/ahmetb/gen-crd-api-reference-docs v0.3.0
 	github.com/gardener/gardener v1.99.0
 	github.com/go-logr/logr v1.4.1
@@ -20,14 +21,17 @@ require (
 	k8s.io/client-go v0.29.6
 	k8s.io/code-generator v0.29.6
 	k8s.io/component-base v0.29.6
-	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0
+	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8
 	sigs.k8s.io/controller-runtime v0.17.5
 )
+
+replace github.com/gardener/gardener => github.com/dimitar-kostadinov/gardener v1.27.1-0.20240717074249-d15e832232ae
 
 require (
 	github.com/BurntSushi/toml v1.3.2 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.2.1 // indirect
+	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
@@ -44,7 +48,7 @@ require (
 	github.com/gardener/cert-management v0.15.0 // indirect
 	github.com/gardener/etcd-druid v0.22.1 // indirect
 	github.com/gardener/hvpa-controller/api v0.15.0 // indirect
-	github.com/gardener/machine-controller-manager v0.53.0 // indirect
+	github.com/gardener/machine-controller-manager v0.53.1 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/errors v0.20.4 // indirect
 	github.com/go-openapi/jsonpointer v0.20.0 // indirect
@@ -98,7 +102,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/crypto v0.25.0 // indirect
-	golang.org/x/exp v0.0.0-20240707233637-46b078467d37 // indirect
+	golang.org/x/exp v0.0.0-20240716175740-e3f259677ff7 // indirect
 	golang.org/x/mod v0.19.0 // indirect
 	golang.org/x/net v0.27.0 // indirect
 	golang.org/x/oauth2 v0.20.0 // indirect
