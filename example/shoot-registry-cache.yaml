@@ -19,12 +19,12 @@ spec:
       kind: RegistryConfig
       caches:
       - upstream: docker.io
-        volume:
-          size: 500Mi
-      - upstream: ghcr.io
+#        volume:
+#          size: 500Mi
+#      - upstream: ghcr.io
       - upstream: quay.io
-        garbageCollection:
-          ttl: 0s
+#        garbageCollection:
+#          ttl: 0s
   networking:
     type: calico
     nodes: 10.10.0.0/16
@@ -37,7 +37,7 @@ spec:
       cri:
         name: containerd
       minimum: 1
-      maximum: 1
+      maximum: 2
       maxSurge: 1
       maxUnavailable: 0
   kubernetes:

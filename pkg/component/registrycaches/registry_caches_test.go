@@ -7,6 +7,7 @@ package registrycaches_test
 import (
 	"context"
 	"encoding/base64"
+	"github.com/go-logr/logr"
 	"time"
 
 	gardencorev1beta1 "github.com/gardener/gardener/pkg/apis/core/v1beta1"
@@ -50,6 +51,7 @@ var _ = Describe("RegistryCaches", func() {
 		ctx        = context.Background()
 		dockerSize = resource.MustParse("10Gi")
 		arSize     = resource.MustParse("20Gi")
+		logger     = logr.Discard()
 
 		c                     client.Client
 		values                Values
@@ -103,7 +105,7 @@ var _ = Describe("RegistryCaches", func() {
 	})
 
 	JustBeforeEach(func() {
-		registryCaches = New(c, namespace, values)
+		registryCaches = New(c, logger, namespace, values)
 	})
 
 	Describe("#Deploy", func() {

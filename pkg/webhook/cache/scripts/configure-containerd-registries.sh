@@ -58,7 +58,7 @@ function configure_registry {
   registry_cache_endpoint=$2
   upstream_url=$3
 
-  if ! run_id=$upstream_host with_retry curl --silent --show-error --connect-timeout 2 "$registry_cache_endpoint"
+  if ! run_id=$upstream_host with_retry curl --insecure --silent --show-error --connect-timeout 2 "$registry_cache_endpoint"
   then
     echo "[$upstream_host] Failed why waiting registry to be available. Exiting..."
     exit 1
@@ -73,6 +73,7 @@ server = "$upstream_url"
 
 [host."$registry_cache_endpoint"]
   capabilities = ["pull", "resolve"]
+  ca = "/etc/certs/ca-bundle.pem"
 EOF
 
   echo "[$upstream_host] Created hosts.toml file."  

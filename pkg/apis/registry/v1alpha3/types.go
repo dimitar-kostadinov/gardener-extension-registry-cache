@@ -90,4 +90,6 @@ type RegistryCacheStatus struct {
 	Endpoint string `json:"endpoint"`
 	// RemoteURL is the remote registry URL.
 	RemoteURL string `json:"remoteURL"`
+	// ClusterIP is the Endpoint IP address
+	ClusterIP string `json:"clusterIP,omitempty""`
 }

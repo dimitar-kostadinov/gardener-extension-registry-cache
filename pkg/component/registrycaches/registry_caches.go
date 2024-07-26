@@ -22,6 +22,7 @@ import (
 	"github.com/gardener/gardener/pkg/utils"
 	kubernetesutils "github.com/gardener/gardener/pkg/utils/kubernetes"
 	"github.com/gardener/gardener/pkg/utils/managedresources"
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -71,16 +72,20 @@ type Values struct {
 	// before ManagedResource deletion during the Destroy operation. When set to true, the deployed
 	// resources by ManagedResources won't be deleted, but the ManagedResource itself will be deleted.
 	KeepObjectsOnDestroy bool
+	// TLSSecrets
+	TLSSecrets map[string]*corev1.Secret
 }
 
 // New creates a new instance of DeployWaiter for registry caches.
 func New(
 	client client.Client,
+	logger logr.Logger,
 	namespace string,
 	values Values,
 ) component.DeployWaiter {
 	return &registryCaches{
 		client:    client,
+		logger:    logger,
 		namespace: namespace,
 		values:    values,
 	}
@@ -88,6 +93,7 @@ func New(
 
 type registryCaches struct {
 	client    client.Client
+	logger    logr.Logger
 	namespace string
 	values    Values
 }
@@ -178,6 +184,7 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 	const (
 		registryCacheVolumeName  = "cache-volume"
 		registryConfigVolumeName = "config-volume"
+		registryCertsVolumeName  = "certs-volume"
 		debugPort                = 5001
 	)
 
@@ -235,28 +242,6 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 	}
 	utilruntime.Must(kubernetesutils.MakeUnique(configSecret))
 
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: metav1.NamespaceSystem,
-			Labels:    getLabels(name, upstreamLabel),
-			Annotations: map[string]string{
-				constants.UpstreamAnnotation:  cache.Upstream,
-				constants.RemoteURLAnnotation: remoteURL,
-			},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: getLabels(name, upstreamLabel),
-			Ports: []corev1.ServicePort{{
-				Name:       "registry-cache",
-				Port:       constants.RegistryCachePort,
-				Protocol:   corev1.ProtocolTCP,
-				TargetPort: intstr.FromString("registry-cache"),
-			}},
-			Type: corev1.ServiceTypeClusterIP,
-		},
-	}
-
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -264,7 +249,7 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 			Labels:    getLabels(name, upstreamLabel),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: service.Name,
+			ServiceName: name,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: getLabels(name, upstreamLabel),
 			},
@@ -380,6 +365,34 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 		},
 	}
 
+	var secretTLS *corev1.Secret
+	if val, ok := r.values.TLSSecrets[cache.Upstream]; ok {
+		secretTLS = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name + "-tls",
+				Namespace: metav1.NamespaceSystem,
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: val.Data,
+		}
+		statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: registryCertsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: name + "-tls",
+				},
+			},
+		})
+		statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+			Name:      registryCertsVolumeName,
+			MountPath: "/etc/docker/registry/certs",
+		})
+		if statefulSet.Spec.Template.Annotations == nil {
+			statefulSet.Spec.Template.Annotations = map[string]string{}
+		}
+		statefulSet.Spec.Template.Annotations["checksum/secret-"+name+"-tls"] = utils.ComputeChecksum(val.Data)
+	}
+
 	var vpa *vpaautoscalingv1.VerticalPodAutoscaler
 	if r.values.VPAEnabled {
 		updateMode := vpaautoscalingv1.UpdateModeAuto
@@ -419,7 +432,8 @@ func (r *registryCaches) computeResourcesDataForRegistryCache(ctx context.Contex
 
 	return []client.Object{
 		configSecret,
-		service,
+		//service,
+		secretTLS,
 		statefulSet,
 		vpa,
 	}, nil

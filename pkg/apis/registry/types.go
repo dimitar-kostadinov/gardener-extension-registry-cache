@@ -82,4 +82,6 @@ type RegistryCacheStatus struct {
 	Endpoint string
 	// RemoteURL is the remote registry URL.
 	RemoteURL string
+	// ClusterIP is the Endpoint IP address
+	ClusterIP string
 }
