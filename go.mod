@@ -15,6 +15,7 @@ require (
 	golang.org/x/crypto v0.30.0
 	golang.org/x/tools v0.28.0
 	k8s.io/api v0.31.3
+	k8s.io/apiextensions-apiserver v0.31.3
 	k8s.io/apimachinery v0.31.3
 	k8s.io/autoscaler/vertical-pod-autoscaler v1.2.1
 	k8s.io/client-go v0.31.3
@@ -117,7 +118,6 @@ require (
 	helm.sh/helm/v3 v3.16.3 // indirect
 	istio.io/api v1.23.3 // indirect
 	istio.io/client-go v1.23.3 // indirect
-	k8s.io/apiextensions-apiserver v0.31.3 // indirect
 	k8s.io/apiserver v0.31.3 // indirect
 	k8s.io/cluster-bootstrap v0.31.3 // indirect
 	k8s.io/component-helpers v0.31.3 // indirect

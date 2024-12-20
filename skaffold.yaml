@@ -36,6 +36,9 @@ build:
             - pkg/apis/registry/helper
             - pkg/apis/registry/install
             - pkg/apis/registry/v1alpha3
+            - pkg/apis/spegel
+            - pkg/apis/spegel/install
+            - pkg/apis/spegel/v1alpha1
             - pkg/cmd
             - pkg/component/registrycaches
             - pkg/component/registrycaches/monitoring/dashboard.json
@@ -44,10 +47,12 @@ build:
             - pkg/constants
             - pkg/controller/cache
             - pkg/controller/mirror
+            - pkg/controller/spegel
             - pkg/secrets
             - pkg/utils/registry
             - pkg/webhook/cache
             - pkg/webhook/mirror
+            - pkg/webhook/spegel
             - VERSION
         ldflags:
           - '{{.LD_FLAGS}}'
@@ -91,6 +96,7 @@ build:
             - pkg/admission/validator/cache
             - pkg/admission/validator/helper
             - pkg/admission/validator/mirror
+            - pkg/admission/validator/spegel
             - pkg/apis/mirror
             - pkg/apis/mirror/install
             - pkg/apis/mirror/v1alpha1
@@ -100,6 +106,10 @@ build:
             - pkg/apis/registry/install
             - pkg/apis/registry/v1alpha3
             - pkg/apis/registry/validation
+            - pkg/apis/spegel
+            - pkg/apis/spegel/install
+            - pkg/apis/spegel/v1alpha1
+            - pkg/apis/spegel/validation
             - pkg/constants
             - VERSION
         ldflags:

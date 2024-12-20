@@ -30,6 +30,7 @@ import (
 	admissioncmd "github.com/gardener/gardener-extension-registry-cache/pkg/admission/cmd"
 	mirrorinstall "github.com/gardener/gardener-extension-registry-cache/pkg/apis/mirror/install"
 	registryinstall "github.com/gardener/gardener-extension-registry-cache/pkg/apis/registry/install"
+	spegelinstall "github.com/gardener/gardener-extension-registry-cache/pkg/apis/spegel/install"
 	"github.com/gardener/gardener-extension-registry-cache/pkg/constants"
 )
 
@@ -116,6 +117,7 @@ func NewAdmissionCommand(ctx context.Context) *cobra.Command {
 			coreinstall.Install(mgr.GetScheme())
 			registryinstall.Install(mgr.GetScheme())
 			mirrorinstall.Install(mgr.GetScheme())
+			spegelinstall.Install(mgr.GetScheme())
 
 			var sourceCluster cluster.Cluster
 			if sourceClusterConfig != nil {

@@ -28,6 +28,7 @@ import (
 
 	mirrorinstall "github.com/gardener/gardener-extension-registry-cache/pkg/apis/mirror/install"
 	registryinstall "github.com/gardener/gardener-extension-registry-cache/pkg/apis/registry/install"
+	spegelinstall "github.com/gardener/gardener-extension-registry-cache/pkg/apis/spegel/install"
 	cachecontroller "github.com/gardener/gardener-extension-registry-cache/pkg/controller/cache"
 )
 
@@ -95,6 +96,9 @@ func (o *Options) run(ctx context.Context) error {
 		return fmt.Errorf("could not update manager scheme: %w", err)
 	}
 	if err := mirrorinstall.AddToScheme(mgr.GetScheme()); err != nil {
+		return fmt.Errorf("could not update manager scheme: %w", err)
+	}
+	if err := spegelinstall.AddToScheme(mgr.GetScheme()); err != nil {
 		return fmt.Errorf("could not update manager scheme: %w", err)
 	}
 
