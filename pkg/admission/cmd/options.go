@@ -9,6 +9,7 @@ import (
 
 	cachevalidator "github.com/gardener/gardener-extension-registry-cache/pkg/admission/validator/cache"
 	mirrorvalidator "github.com/gardener/gardener-extension-registry-cache/pkg/admission/validator/mirror"
+	spegelvalidator "github.com/gardener/gardener-extension-registry-cache/pkg/admission/validator/spegel"
 )
 
 // GardenWebhookSwitchOptions are the extensionscmdwebhook.SwitchOptions for the admission webhooks.
@@ -16,5 +17,6 @@ func GardenWebhookSwitchOptions() *extensionscmdwebhook.SwitchOptions {
 	return extensionscmdwebhook.NewSwitchOptions(
 		extensionscmdwebhook.Switch(cachevalidator.Name, cachevalidator.New),
 		extensionscmdwebhook.Switch(mirrorvalidator.Name, mirrorvalidator.New),
+		extensionscmdwebhook.Switch(spegelvalidator.Name, spegelvalidator.New),
 	)
 }

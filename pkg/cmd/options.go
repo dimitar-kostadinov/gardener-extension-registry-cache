@@ -21,8 +21,10 @@ import (
 	"github.com/gardener/gardener-extension-registry-cache/pkg/apis/config/validation"
 	cachecontroller "github.com/gardener/gardener-extension-registry-cache/pkg/controller/cache"
 	mirrorcontroller "github.com/gardener/gardener-extension-registry-cache/pkg/controller/mirror"
+	spegelcontroller "github.com/gardener/gardener-extension-registry-cache/pkg/controller/spegel"
 	cachewebhook "github.com/gardener/gardener-extension-registry-cache/pkg/webhook/cache"
 	mirrorwebhook "github.com/gardener/gardener-extension-registry-cache/pkg/webhook/mirror"
+	spegelwebhook "github.com/gardener/gardener-extension-registry-cache/pkg/webhook/spegel"
 )
 
 var (
@@ -95,6 +97,7 @@ func ControllerSwitches() *cmd.SwitchOptions {
 	return cmd.NewSwitchOptions(
 		cmd.Switch(cachecontroller.ControllerName, cachecontroller.AddToManager),
 		cmd.Switch(mirrorcontroller.ControllerName, mirrorcontroller.AddToManager),
+		cmd.Switch(spegelcontroller.ControllerName, spegelcontroller.AddToManager),
 		cmd.Switch(extensionsheartbeatcontroller.ControllerName, extensionsheartbeatcontroller.AddToManager),
 	)
 }
@@ -104,5 +107,6 @@ func WebhookSwitchOptions() *extensionscmdwebhook.SwitchOptions {
 	return extensionscmdwebhook.NewSwitchOptions(
 		extensionscmdwebhook.Switch(cachewebhook.Name, cachewebhook.New),
 		extensionscmdwebhook.Switch(mirrorwebhook.Name, mirrorwebhook.New),
+		extensionscmdwebhook.Switch(spegelwebhook.Name, spegelwebhook.New),
 	)
 }
