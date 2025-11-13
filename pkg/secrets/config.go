@@ -25,6 +25,14 @@ const (
 	ManagerIdentity = "extension-registry-cache"
 	// CAName is the name of the CA secret.
 	CAName = "ca-extension-registry-cache"
+
+	// SpegelPeers is the spegel peers prefix.
+	SpegelPeers = "spegelpeers"
+
+	// SpegelPeersTLSSecretName is the server TLS secret.
+	SpegelPeersTLSSecretName = SpegelPeers + "-tls"
+	// SpegelPeersClientTLSSecretName is the client TLS secret.
+	SpegelPeersClientTLSSecretName = SpegelPeers + "-client-tls"
 )
 
 // ConfigsFor returns configurations for the secrets manager for the given registry caches services.
@@ -71,4 +79,38 @@ func ConfigsFor(services []corev1.Service) []extensionssecretsmanager.SecretConf
 func TLSSecretNameForUpstream(upstream string) string {
 	name := registryutils.ComputeKubernetesResourceName(upstream)
 	return name + "-tls"
+}
+
+// ConfigsForSpegel returns configuration for spegel registry
+func ConfigsForSpegel(namespace, ingress string) []extensionssecretsmanager.SecretConfigWithOptions {
+	return []extensionssecretsmanager.SecretConfigWithOptions{
+		{
+			Config: &secretsutils.CertificateSecretConfig{
+				Name:       CAName,
+				CommonName: CAName,
+				CertType:   secretsutils.CACert,
+				Validity:   ptr.To(730 * 24 * time.Hour),
+			},
+			Options: []secretsmanager.GenerateOption{secretsmanager.Persist()},
+		},
+		{
+			Config: &secretsutils.CertificateSecretConfig{
+				Name:                        SpegelPeersTLSSecretName,
+				CommonName:                  SpegelPeersTLSSecretName,
+				DNSNames:                    append(kubernetesutils.DNSNamesForService(SpegelPeers, namespace), ingress),
+				CertType:                    secretsutils.ServerCert,
+				SkipPublishingCACertificate: true,
+			},
+			Options: []secretsmanager.GenerateOption{secretsmanager.SignedByCA(CAName)},
+		},
+		{
+			Config: &secretsutils.CertificateSecretConfig{
+				Name:                        SpegelPeersClientTLSSecretName,
+				CommonName:                  "spegel-bootstrapper", // TODO: what would be the proper common name of the client?
+				CertType:                    secretsutils.ClientCert,
+				SkipPublishingCACertificate: true,
+			},
+			Options: []secretsmanager.GenerateOption{secretsmanager.SignedByCA(CAName, secretsmanager.UseCurrentCA)}, // TODO: check if old cert should be used?
+		},
+	}
 }

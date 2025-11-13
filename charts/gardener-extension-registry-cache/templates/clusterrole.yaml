@@ -30,6 +30,7 @@ rules:
   - extensions
   - extensions/status
   resourceNames:
+  - registry-spegel
   - registry-cache
   - registry-mirror
   verbs:
@@ -69,6 +70,8 @@ rules:
   resourceNames:
   - extension-registry-cache
   - extension-registry-cache-services
+  - extension-registry-cache-spegel-shoot
+  - extension-registry-cache-spegel-seed
   verbs:
   - update
   - patch
@@ -134,7 +137,16 @@ rules:
   - prometheusrules
   resourceNames:
   - shoot-registry-cache
+  - shoot-registry-spegel
   verbs:
   - update
   - patch
   - delete
+- apiGroups:
+  - extensions.gardener.cloud
+  resources:
+  - dnsrecords
+  verbs:
+  - get
+  - list
+  - watch

@@ -25,3 +25,8 @@ images:
       confidentiality_requirement: high
       integrity_requirement: high
       availability_requirement: low
+# registry spegel Deployment
+- name: spegel-peers
+  repository: europe-docker.pkg.dev/gardener-project/public/gardener/extensions/registry-cache-spegel-peers
+  tag: latest
+  pullPolicy: IfNotPresent

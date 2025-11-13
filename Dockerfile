@@ -33,3 +33,9 @@ FROM base AS registry-cache-admission
 
 COPY --from=builder /go/bin/gardener-extension-registry-cache-admission /gardener-extension-registry-cache-admission
 ENTRYPOINT ["/gardener-extension-registry-cache-admission"]
+
+############# gardener-extension-registry-cache-spegel-peers
+FROM base AS registry-cache-spegel-peers
+
+COPY --from=builder /go/bin/gardener-extension-spegel-bootstrap /gardener-extension-spegel-bootstrap
+ENTRYPOINT ["/gardener-extension-spegel-bootstrap"]

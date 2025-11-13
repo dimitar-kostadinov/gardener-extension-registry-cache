@@ -10,7 +10,11 @@ patches:
       path: /helm/values
       value:
         image:
-          ref: local-skaffold/gardener-extension-registry-cache
+          ref: local-skaffold/gardener-extension-registry-cache:v0.0.0
+        imageVectorOverwrite:
+          images:
+          - name: spegel-peers
+            ref: garden.local.gardener.cloud:5001/local-skaffold_gardener-extension-registry-cache-spegel-peers:v0.18.0-4-gb39ebd52@sha256:550d6cc9ac31ff7dfe925054a1263360242ecc0374d24c89ff36e153e2a0fd1d 
   target:
     group: core.gardener.cloud
     kind: ControllerDeployment
