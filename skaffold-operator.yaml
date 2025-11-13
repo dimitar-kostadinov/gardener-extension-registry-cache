@@ -1,7 +1,7 @@
 apiVersion: skaffold/v4beta12
 kind: Config
 metadata:
-  name: extension
+  name: operator
 build:
   artifacts:
     - image: local-skaffold/gardener-extension-registry-cache
@@ -119,9 +119,8 @@ build:
   insecureRegistries:
     - registry.local.gardener.cloud:5001
 manifests:
-  kustomize:
-    paths:
-      - dev-setup/local
+  rawYaml:
+    - local-setup/operator-extension-resource.yaml
 deploy:
   kubectl: {}
 resourceSelector:
@@ -131,9 +130,3 @@ resourceSelector:
         - .spec.deployment.extension.helm.ociRepository.ref
         - .spec.deployment.admission.runtimeCluster.helm.ociRepository.ref
         - .spec.deployment.admission.virtualCluster.helm.ociRepository.ref
-profiles:
-  - name: remote
-    manifests:
-      kustomize:
-        paths:
-          - dev-setup/remote

@@ -24,3 +24,5 @@ spec:
     type: registry-cache
   - kind: Extension
     type: registry-mirror
+  - kind: Extension
+    type: registry-spegel

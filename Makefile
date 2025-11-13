@@ -7,6 +7,7 @@ GARDENER_HACK_DIR           := $(shell go list -m -f "{{.Dir}}" github.com/garde
 EXTENSION_PREFIX            := gardener-extension
 NAME                        := registry-cache
 ADMISSION_NAME              := $(NAME)-admission
+SPEGEL_NAME                 := $(NAME)-spegel-peers
 IMAGE                       := europe-docker.pkg.dev/gardener-project/public/gardener/extensions/registry-cache
 REPO_ROOT                   := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 HACK_DIR                    := $(REPO_ROOT)/hack
@@ -47,6 +48,7 @@ docker-login:
 docker-images:
 	@docker build --build-arg EFFECTIVE_VERSION=$(EFFECTIVE_VERSION) -t $(IMAGE):$(IMAGE_TAG) -f Dockerfile -m 6g --target $(NAME) .
 	@docker build --build-arg EFFECTIVE_VERSION=$(EFFECTIVE_VERSION) -t $(IMAGE)-admission:$(IMAGE_TAG) -f Dockerfile -m 6g --target $(ADMISSION_NAME) .
+	@docker build --build-arg EFFECTIVE_VERSION=$(EFFECTIVE_VERSION) -t $(IMAGE)-spegel-peers:$(IMAGE_TAG) -f Dockerfile -m 6g --target $(SPEGEL_NAME) .
 
 #####################################################################
 # Rules for verification, formatting, linting, testing and cleaning #
