@@ -27,12 +27,13 @@ Resource Types:
 <td>
 <code>registryPort</code></br>
 <em>
-uint16
+int32
 </em>
 </td>
 <td>
 <em>(Optional)</em>
 <p>RegistryPort is the port that serves the OCI registry on each Node.
+<code>registryPort</code> should be a valid port number (1-65535, inclusive).
 Defaults to 5000.</p>
 </td>
 </tr>
@@ -40,12 +41,13 @@ Defaults to 5000.</p>
 <td>
 <code>routerPort</code></br>
 <em>
-uint16
+int32
 </em>
 </td>
 <td>
 <em>(Optional)</em>
 <p>RouterPort is the port for P2P router on each Node.
+<code>routerPort</code> should be a valid port number (1-65535, inclusive).
 Defaults to 5001.</p>
 </td>
 </tr>
@@ -53,12 +55,13 @@ Defaults to 5001.</p>
 <td>
 <code>metricsPort</code></br>
 <em>
-uint16
+int32
 </em>
 </td>
 <td>
 <em>(Optional)</em>
 <p>MetricsPort is the metrics port on each Node.
+<code>metricsPort</code> should be a valid port number (1-65535, inclusive).
 Defaults to 9090.</p>
 </td>
 </tr>

@@ -48,9 +48,9 @@ func RegisterConversions(s *runtime.Scheme) error {
 }
 
 func autoConvert_v1alpha1_SpegelConfig_To_spegel_SpegelConfig(in *SpegelConfig, out *spegel.SpegelConfig, s conversion.Scope) error {
-	out.RegistryPort = (*uint16)(unsafe.Pointer(in.RegistryPort))
-	out.RouterPort = (*uint16)(unsafe.Pointer(in.RouterPort))
-	out.MetricsPort = (*uint16)(unsafe.Pointer(in.MetricsPort))
+	out.RegistryPort = (*int32)(unsafe.Pointer(in.RegistryPort))
+	out.RouterPort = (*int32)(unsafe.Pointer(in.RouterPort))
+	out.MetricsPort = (*int32)(unsafe.Pointer(in.MetricsPort))
 	return nil
 }
 
@@ -60,9 +60,9 @@ func Convert_v1alpha1_SpegelConfig_To_spegel_SpegelConfig(in *SpegelConfig, out 
 }
 
 func autoConvert_spegel_SpegelConfig_To_v1alpha1_SpegelConfig(in *spegel.SpegelConfig, out *SpegelConfig, s conversion.Scope) error {
-	out.RegistryPort = (*uint16)(unsafe.Pointer(in.RegistryPort))
-	out.RouterPort = (*uint16)(unsafe.Pointer(in.RouterPort))
-	out.MetricsPort = (*uint16)(unsafe.Pointer(in.MetricsPort))
+	out.RegistryPort = (*int32)(unsafe.Pointer(in.RegistryPort))
+	out.RouterPort = (*int32)(unsafe.Pointer(in.RouterPort))
+	out.MetricsPort = (*int32)(unsafe.Pointer(in.MetricsPort))
 	return nil
 }
 

@@ -19,17 +19,17 @@ func (in *SpegelConfig) DeepCopyInto(out *SpegelConfig) {
 	out.TypeMeta = in.TypeMeta
 	if in.RegistryPort != nil {
 		in, out := &in.RegistryPort, &out.RegistryPort
-		*out = new(uint16)
+		*out = new(int32)
 		**out = **in
 	}
 	if in.RouterPort != nil {
 		in, out := &in.RouterPort, &out.RouterPort
-		*out = new(uint16)
+		*out = new(int32)
 		**out = **in
 	}
 	if in.MetricsPort != nil {
 		in, out := &in.MetricsPort, &out.MetricsPort
-		*out = new(uint16)
+		*out = new(int32)
 		**out = **in
 	}
 	return

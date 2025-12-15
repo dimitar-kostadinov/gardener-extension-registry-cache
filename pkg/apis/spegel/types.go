@@ -15,11 +15,11 @@ type SpegelConfig struct {
 	metav1.TypeMeta
 
 	// RegistryPort is the port that serves the OCI registry on each Node.
-	RegistryPort *uint16
+	RegistryPort *int32
 	// RouterPort is the port for P2P router on each Node.
-	RouterPort *uint16
+	RouterPort *int32
 	// MetricsPort is the metrics port on each Node.
-	MetricsPort *uint16
+	MetricsPort *int32
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
