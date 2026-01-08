@@ -201,7 +201,7 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 			ImageRef: &extensionsv1alpha1.FileContentImageRef{
 				//TODO:
 				//Image:           "ghcr.io/spegel-org/spegel:v0.0.28",
-				Image:           "garden.local.gardener.cloud:5001/spegel-org/spegel:v0.5.1-test", //"reg.seed-aws.i024114.shoot.dev.k8s-hana.ondemand.com/spegel-org/spegel:v0.2.0-test3",
+				Image:           "registry.local.gardener.cloud:5000/spegel-org/spegel:v0.5.1-test", //"reg.seed-aws.i024114.shoot.dev.k8s-hana.ondemand.com/spegel-org/spegel:v0.2.0-test3",
 				FilePathInImage: "/app/spegel",
 			},
 		},
