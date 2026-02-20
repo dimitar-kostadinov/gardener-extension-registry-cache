@@ -7,6 +7,7 @@ package spegel
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	extensionssecretsmanager "github.com/gardener/gardener/extensions/pkg/util/secret/manager"
@@ -15,6 +16,7 @@ import (
 	"github.com/gardener/gardener/pkg/client/kubernetes"
 	"github.com/gardener/gardener/pkg/component"
 	kubeapiserverconstants "github.com/gardener/gardener/pkg/component/kubernetes/apiserver/constants"
+	"github.com/gardener/gardener/pkg/component/networking/coredns"
 	"github.com/gardener/gardener/pkg/utils"
 	gardenerutils "github.com/gardener/gardener/pkg/utils/gardener"
 	kubernetesutils "github.com/gardener/gardener/pkg/utils/kubernetes"
@@ -193,6 +195,7 @@ func (s *spegelCache) computeResourcesShootData(spegelServiceAccountName string)
 	return registry.AddAllAndSerialize(
 		s.getSpegelClusterRole(),
 		s.getSpegelClusterRoleBinding(spegelServiceAccountName),
+		s.getSpegelDaemonSet(),
 	)
 }
 
@@ -253,22 +256,228 @@ func (s *spegelCache) getSpegelClusterRoleBinding(serviceAccountName string) *rb
 	}
 }
 
+func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
+	spegelDaemonSet := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "spegel",
+			Namespace: metav1.NamespaceSystem,
+			Labels: utils.MergeStringMaps(getShootLabels(), map[string]string{
+				v1beta1constants.LabelNodeCriticalComponent: "true",
+			}),
+		},
+		Spec: appsv1.DaemonSetSpec{
+			RevisionHistoryLimit: ptr.To[int32](2),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: getShootLabels(),
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: utils.MergeStringMaps(getShootLabels(), map[string]string{
+						v1beta1constants.LabelNodeCriticalComponent: "true",
+						v1beta1constants.LabelNetworkPolicyToDNS:    v1beta1constants.LabelNetworkPolicyAllowed,
+						gardenerutils.NetworkPolicyLabel(v1beta1constants.DeploymentNameKubeAPIServer, kubeapiserverconstants.Port): v1beta1constants.LabelNetworkPolicyAllowed,
+					}),
+					Annotations: map[string]string{
+						"prometheus.io/port":   strconv.Itoa(9090),
+						"prometheus.io/scrape": strconv.FormatBool(true),
+					},
+				},
+				Spec: corev1.PodSpec{
+					PriorityClassName:  "system-node-critical",
+					ServiceAccountName: "gardener-spegel",
+					HostNetwork:        true,
+					// DNSPolicy:          corev1.DNSClusterFirst,
+					SecurityContext: &corev1.PodSecurityContext{
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
+					Tolerations: []corev1.Toleration{
+						{
+							Operator: corev1.TolerationOpExists,
+							Effect:   corev1.TaintEffectNoExecute,
+						},
+						{
+							Operator: corev1.TolerationOpExists,
+							Effect:   corev1.TaintEffectNoSchedule,
+						},
+					},
+					// NodeSelector: map[string]string{
+					// 	v1beta1constants.LabelNodeLocalDNS: "true",
+					// 	v1beta1constants.LabelWorkerPool:   worker.Name,
+					// },
+					Containers: []corev1.Container{
+						{
+							Name:  "spegel",
+							Image: "ghcr.io/spegel-org/spegel:v0.6.0",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse("48Mi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+							},
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: ptr.To(false),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{
+										"ALL",
+									},
+								},
+							},
+							Args: []string{
+								"-localip",
+								n.containerArg(),
+								"-conf",
+								"/etc/Corefile",
+								"-upstreamsvc",
+								serviceName,
+								"-health-port",
+								strconv.Itoa(livenessProbePort),
+							},
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: int32(5500),
+									Name:          "registry",
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									ContainerPort: int32(5501),
+									Name:          "router",
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									ContainerPort: int32(9090),
+									Name:          "metrics",
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Host: n.getIPVSAddress(),
+										Path: "/health",
+										Port: intstr.FromInt32(livenessProbePort),
+									},
+								},
+								InitialDelaySeconds: int32(60),
+								TimeoutSeconds:      int32(5),
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									MountPath: "/run/xtables.lock",
+									Name:      "xtables-lock",
+									ReadOnly:  false,
+								},
+								{
+									MountPath: "/etc/coredns",
+									Name:      "config-volume",
+								},
+								{
+									MountPath: "/etc/kube-dns",
+									Name:      "kube-dns-config",
+								},
+								{
+									Name:      volumeMountNameCustomConfig,
+									MountPath: volumeMountPathCustomConfig,
+									ReadOnly:  true,
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "xtables-lock",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/run/xtables.lock",
+									Type: &hostPathFileOrCreate,
+								},
+							},
+						},
+						{
+							Name: "kube-dns-config",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "kube-dns",
+									},
+									Optional: ptr.To(true),
+								},
+							},
+						},
+						{
+							Name: "config-volume",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: configMap.Name,
+									},
+									Items: []corev1.KeyToPath{
+										{
+											Key:  configDataKey,
+											Path: "Corefile.base",
+										},
+									},
+								},
+							},
+						},
+						{
+							Name: volumeMountNameCustomConfig,
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: coredns.CustomConfigMapName,
+									},
+									DefaultMode: ptr.To[int32](420),
+									Optional:    ptr.To(true),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return spegelDaemonSet
+}
+
+/***
+          - name: registry
+            containerPort: {{ .Values.service.registry.port }}
+            {{- if not .Values.service.registry.usePreferSameNodeTrafficDistribution }}
+            hostPort: {{ .Values.service.registry.hostPort }}
+            {{- end }}
+            protocol: TCP
+          - name: router-tcp
+            containerPort: {{ .Values.service.router.port }}
+            protocol: TCP
+          - name: router-quic
+            containerPort: {{ .Values.service.router.port }}
+            protocol: UDP
+          - name: metrics
+            containerPort: {{ .Values.service.metrics.port }}
+            protocol: TCP
+
+**/
+
 func (s *spegelCache) getSpegelPeersDeployment(serverTlsSecretName, caBundleSecretName string) *appsv1.Deployment {
 	spegelDeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "spegelpeers",
 			Namespace: s.namespace,
-			Labels:    getLabels(),
+			Labels:    getSeedLabelss(),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas:             ptr.To[int32](2),
 			RevisionHistoryLimit: ptr.To[int32](2),
 			Selector: &metav1.LabelSelector{
-				MatchLabels: getLabels(),
+				MatchLabels: getSeedLabels(),
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: utils.MergeStringMaps(getLabels(), map[string]string{
+					Labels: utils.MergeStringMaps(getSeedLabels(), map[string]string{
 						v1beta1constants.LabelNetworkPolicyToDNS: v1beta1constants.LabelNetworkPolicyAllowed,
 						gardenerutils.NetworkPolicyLabel(v1beta1constants.DeploymentNameKubeAPIServer, kubeapiserverconstants.Port): v1beta1constants.LabelNetworkPolicyAllowed,
 					}),
@@ -409,10 +618,10 @@ func (s *spegelCache) getSpegelPeersService() *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "spegelpeers",
 			Namespace: s.namespace,
-			Labels:    getLabels(),
+			Labels:    getSeedLabels(),
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: getLabels(),
+			Selector: getSeedLabels(),
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "spegel-peers",
@@ -431,7 +640,7 @@ func (s *spegelCache) getSpegelPeersIngress() *networkingv1.Ingress {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "spegelpeers",
 			Namespace: s.namespace,
-			Labels:    getLabels(),
+			Labels:    getSeedLabels(),
 			Annotations: map[string]string{
 				"nginx.ingress.kubernetes.io/backend-protocol": "HTTPS",
 				"nginx.ingress.kubernetes.io/ssl-passthrough":  "true",
@@ -470,9 +679,16 @@ func (s *spegelCache) ClientTLSSecretName() string {
 	return s.clientTLSSecretName
 }
 
-func getLabels() map[string]string {
+func getSeedLabels() map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":    "spegel-peers",
+		"app.kubernetes.io/part-of": "registry-cache",
+	}
+}
+
+func getShootLabels() map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":    "spegel",
 		"app.kubernetes.io/part-of": "registry-cache",
 	}
 }
