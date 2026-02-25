@@ -7,6 +7,7 @@ package spegel
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	extensionssecretsmanager "github.com/gardener/gardener/extensions/pkg/util/secret/manager"
@@ -97,6 +98,11 @@ func (s *spegelCache) Deploy(ctx context.Context) error {
 		return err
 	}
 
+	clusterCABundle, err := getLatestIssuedCABundleSecret(ctx, s.client, s.namespace)
+	if err != nil {
+		return err
+	}
+
 	caBundle, found := s.secretsManager.Get(secrets.CAName)
 	if !found {
 		return fmt.Errorf("secret %q not found", secrets.CAName)
@@ -113,7 +119,7 @@ func (s *spegelCache) Deploy(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	seedData, err := s.computeResourcesSeedData(generatedSecrets[secrets.SpegelPeersTLSSecretName].Name, caBundle.Name)
+	seedData, err := s.computeResourcesSeedData(generatedSecrets[secrets.SpegelPeersTLSSecretName].Name, caBundle.Name, clusterCABundle.Name)
 	if err != nil {
 		return err
 	}
@@ -196,11 +202,11 @@ func (s *spegelCache) computeResourcesShootData(spegelServiceAccountName string)
 	)
 }
 
-func (s *spegelCache) computeResourcesSeedData(serverTlsSecretName, caBundleSecretName string) (map[string][]byte, error) {
+func (s *spegelCache) computeResourcesSeedData(serverTlsSecretName, caBundleSecretName, clusterCAName string) (map[string][]byte, error) {
 	registry := managedresources.NewRegistry(kubernetes.SeedScheme, kubernetes.SeedCodec, kubernetes.SeedSerializer)
 
 	return registry.AddAllAndSerialize(
-		s.getSpegelPeersDeployment(serverTlsSecretName, caBundleSecretName),
+		s.getSpegelPeersDeployment(serverTlsSecretName, caBundleSecretName, clusterCAName),
 		s.getSpegelPeersService(),
 		s.getSpegelPeersIngress(),
 	)
@@ -253,7 +259,7 @@ func (s *spegelCache) getSpegelClusterRoleBinding(serviceAccountName string) *rb
 	}
 }
 
-func (s *spegelCache) getSpegelPeersDeployment(serverTlsSecretName, caBundleSecretName string) *appsv1.Deployment {
+func (s *spegelCache) getSpegelPeersDeployment(serverTlsSecretName, caBundleSecretName, clusterCAName string) *appsv1.Deployment {
 	spegelDeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "spegelpeers",
@@ -337,10 +343,10 @@ func (s *spegelCache) getSpegelPeersDeployment(serverTlsSecretName, caBundleSecr
 									Sources: []corev1.VolumeProjection{
 										{
 											Secret: &corev1.SecretProjection{
-												LocalObjectReference: corev1.LocalObjectReference{Name: v1beta1constants.SecretNameCACluster},
+												LocalObjectReference: corev1.LocalObjectReference{Name: clusterCAName},
 												Items: []corev1.KeyToPath{{
-													Key:  secretsutils.DataKeyCertificateCA,
-													Path: secretsutils.DataKeyCertificateCA,
+													Key:  secretsutils.DataKeyCertificateBundle,
+													Path: secretsutils.DataKeyCertificateBundle,
 												}},
 												Optional: ptr.To(false),
 											},
@@ -475,4 +481,47 @@ func getLabels() map[string]string {
 		"app.kubernetes.io/name":    "spegel-peers",
 		"app.kubernetes.io/part-of": "registry-cache",
 	}
+}
+
+// getLatestIssuedCABundleSecret returns the oidc-webhook latest CA bundle secret
+func getLatestIssuedCABundleSecret(ctx context.Context, c client.Client, namespace string) (*corev1.Secret, error) {
+	secretList := &corev1.SecretList{}
+	if err := c.List(ctx, secretList, client.InNamespace(namespace), client.MatchingLabels{
+		secretsmanager.LabelKeyBundleFor:       v1beta1constants.SecretNameCACluster,
+		secretsmanager.LabelKeyManagedBy:       secretsmanager.LabelValueSecretsManager,
+		secretsmanager.LabelKeyManagerIdentity: "gardenlet",
+	}); err != nil {
+		return nil, err
+	}
+	if len(secretList.Items) == 0 {
+		return nil, fmt.Errorf("bundle CA secrets found for '%s' not found", v1beta1constants.SecretNameCACluster)
+	}
+	return getLatestIssuedSecret(secretList.Items)
+}
+
+// getLatestIssuedSecret returns the secret with the "issued-at-time" label that represents the latest point in time
+func getLatestIssuedSecret(secrets []corev1.Secret) (*corev1.Secret, error) {
+	var newestSecret *corev1.Secret
+	var currentIssuedAtTime time.Time
+	for i := range secrets {
+		// if some of the secrets have no "issued-at-time" label
+		// we have a problem since this is the source of truth
+		issuedAt, ok := secrets[i].Labels[secretsmanager.LabelKeyIssuedAtTime]
+		if !ok {
+			return nil, fmt.Errorf("bundle CA secret %s in namespace %s has no 'issued-at-time' label", secrets[i].Name, secrets[i].Namespace)
+		}
+
+		issuedAtUnix, err := strconv.ParseInt(issuedAt, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		issuedAtTime := time.Unix(issuedAtUnix, 0).UTC()
+		if newestSecret == nil || issuedAtTime.After(currentIssuedAtTime) {
+			newestSecret = &secrets[i]
+			currentIssuedAtTime = issuedAtTime
+		}
+	}
+
+	return newestSecret, nil
 }
