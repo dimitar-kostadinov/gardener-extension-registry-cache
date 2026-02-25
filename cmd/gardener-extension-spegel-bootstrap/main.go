@@ -36,7 +36,7 @@ import (
 const (
 	// Token & CA files for shoot cluster access
 	tokenFile = "/var/run/secrets/cluster-access/token"
-	caFile    = "/var/run/secrets/cluster-access/ca.crt"
+	caFile    = "/var/run/secrets/cluster-access/bundle.crt"
 
 	// Server cert & key files
 	tlsCertFile = "/var/run/secrets/certs/tls.crt"
