@@ -43,6 +43,10 @@ const (
 	spegelName               = "gardener-spegel"
 
 	shootAccessSecretName = "shoot-access-spegel"
+
+	spegelBootstrapCAFile     = "/var/lib/spegel/certs/ca.crt"
+	spegelBootstrapTLSCrtFile = "/var/lib/spegel/certs/tls.crt"
+	spegelBootstrapTLSKeyFile = "/var/lib/spegel/certs/tls.key"
 )
 
 // Values is a set of configuration values for the spegel cache.
@@ -341,7 +345,7 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 					Containers: []corev1.Container{
 						{
 							Name:  "spegel",
-							Image: "ghcr.io/spegel-org/spegel:v0.6.0",
+							Image: "registry.local.gardener.cloud:5001/spegel-org/spegel:v0.5.1-test", //"ghcr.io/spegel-org/spegel:v0.6.0",
 
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
@@ -371,8 +375,11 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 								"--containerd-sock=/run/containerd/containerd.sock",
 								"--containerd-namespace=k8s.io",
 								"--containerd-registry-config-path=/etc/containerd/certs.d",
-								"--bootstrap-kind=dns",
-								"--dns-bootstrap-domain=spegel-bootstrap.kube-system.svc.cluster.local.",
+								"--bootstrap-kind=external",
+								fmt.Sprintf("--external-bootstrap-url=https://%s/bootstrap-nodes", s.values.Domain),
+								fmt.Sprintf("--external-bootstrap-ca=%s", spegelBootstrapCAFile),
+								fmt.Sprintf("--external-bootstrap-tls-crt=%s", spegelBootstrapTLSCrtFile),
+								fmt.Sprintf("--external-bootstrap-tls-key=%s", spegelBootstrapTLSKeyFile),
 								"--containerd-content-path=/var/lib/containerd/io.containerd.content.v1.content",
 								"--debug-web-enabled=true",
 							},
@@ -438,6 +445,11 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 									Name:      "containerd-content",
 									ReadOnly:  true,
 								},
+								{
+									MountPath: "/var/lib/spegel/certs",
+									Name:      "certs",
+									ReadOnly:  true,
+								},
 							},
 						},
 					},
@@ -456,6 +468,15 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
 									Path: "/var/lib/containerd/io.containerd.content.v1.content",
+									Type: ptr.To(corev1.HostPathDirectory),
+								},
+							},
+						},
+						{
+							Name: "certs",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/var/lib/spegel/certs",
 									Type: ptr.To(corev1.HostPathDirectory),
 								},
 							},
