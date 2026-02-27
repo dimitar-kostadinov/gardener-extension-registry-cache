@@ -16,7 +16,6 @@ import (
 	"github.com/gardener/gardener/pkg/client/kubernetes"
 	"github.com/gardener/gardener/pkg/component"
 	kubeapiserverconstants "github.com/gardener/gardener/pkg/component/kubernetes/apiserver/constants"
-	"github.com/gardener/gardener/pkg/component/networking/coredns"
 	"github.com/gardener/gardener/pkg/utils"
 	gardenerutils "github.com/gardener/gardener/pkg/utils/gardener"
 	kubernetesutils "github.com/gardener/gardener/pkg/utils/kubernetes"
@@ -33,6 +32,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/gardener/gardener-extension-registry-cache/pkg/apis/spegel/v1alpha1"
 	"github.com/gardener/gardener-extension-registry-cache/pkg/secrets"
 )
 
@@ -55,6 +55,8 @@ type Values struct {
 	Image string
 	//Domain is the speggel peers ingress domain
 	Domain string
+	//Config is the Spegel API config
+	Config *v1alpha1.SpegelConfig
 }
 
 // Interface is an interface for managing Registry Caches.
@@ -201,6 +203,7 @@ func (s *spegelCache) computeResourcesShootData(spegelServiceAccountName string)
 		s.getSpegelClusterRole(),
 		s.getSpegelClusterRoleBinding(spegelServiceAccountName),
 		s.getSpegelDaemonSet(),
+		s.getSpegelService(),
 	)
 }
 
@@ -261,11 +264,39 @@ func (s *spegelCache) getSpegelClusterRoleBinding(serviceAccountName string) *rb
 	}
 }
 
+func (s *spegelCache) getSpegelService() *corev1.Service {
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "spegel-bootstrap",
+			Namespace: metav1.NamespaceSystem,
+			Labels:    getShootLabels(),
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: getShootLabels(),
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "router",
+					Port:       *s.values.Config.RouterPort,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt32(*s.values.Config.RouterPort),
+				},
+			},
+			Type:                     corev1.ServiceTypeClusterIP,
+			ClusterIP:                "None",
+			ClusterIPs:               []string{"None"},
+			InternalTrafficPolicy:    ptr.To(corev1.ServiceInternalTrafficPolicyCluster),
+			PublishNotReadyAddresses: true,
+			SessionAffinity:          corev1.ServiceAffinityNone,
+		},
+	}
+}
+
 func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 	spegelDaemonSet := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "spegel",
 			Namespace: metav1.NamespaceSystem,
+			// Labels:    getShootLabels(),
 			Labels: utils.MergeStringMaps(getShootLabels(), map[string]string{
 				v1beta1constants.LabelNodeCriticalComponent: "true",
 			}),
@@ -278,9 +309,9 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: utils.MergeStringMaps(getShootLabels(), map[string]string{
-						v1beta1constants.LabelNodeCriticalComponent: "true",
-						v1beta1constants.LabelNetworkPolicyToDNS:    v1beta1constants.LabelNetworkPolicyAllowed,
-						gardenerutils.NetworkPolicyLabel(v1beta1constants.DeploymentNameKubeAPIServer, kubeapiserverconstants.Port): v1beta1constants.LabelNetworkPolicyAllowed,
+						v1beta1constants.LabelNodeCriticalComponent:         "true",
+						v1beta1constants.LabelNetworkPolicyToDNS:            v1beta1constants.LabelNetworkPolicyAllowed,
+						v1beta1constants.LabelNetworkPolicyShootToAPIServer: v1beta1constants.LabelNetworkPolicyAllowed,
 					}),
 					Annotations: map[string]string{
 						"prometheus.io/port":   strconv.Itoa(9090),
@@ -291,7 +322,7 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 					PriorityClassName:  "system-node-critical",
 					ServiceAccountName: "gardener-spegel",
 					HostNetwork:        true,
-					// DNSPolicy:          corev1.DNSClusterFirst,
+					DNSPolicy:          corev1.DNSClusterFirstWithHostNet,
 					SecurityContext: &corev1.PodSecurityContext{
 						SeccompProfile: &corev1.SeccompProfile{
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
@@ -307,14 +338,11 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 							Effect:   corev1.TaintEffectNoSchedule,
 						},
 					},
-					// NodeSelector: map[string]string{
-					// 	v1beta1constants.LabelNodeLocalDNS: "true",
-					// 	v1beta1constants.LabelWorkerPool:   worker.Name,
-					// },
 					Containers: []corev1.Container{
 						{
 							Name:  "spegel",
 							Image: "ghcr.io/spegel-org/spegel:v0.6.0",
+
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceMemory: resource.MustParse("48Mi"),
@@ -324,6 +352,7 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 								},
 							},
 							SecurityContext: &corev1.SecurityContext{
+								ReadOnlyRootFilesystem:   ptr.To(true),
 								AllowPrivilegeEscalation: ptr.To(false),
 								Capabilities: &corev1.Capabilities{
 									Drop: []corev1.Capability{
@@ -332,60 +361,81 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 								},
 							},
 							Args: []string{
-								"-localip",
-								n.containerArg(),
-								"-conf",
-								"/etc/Corefile",
-								"-upstreamsvc",
-								serviceName,
-								"-health-port",
-								strconv.Itoa(livenessProbePort),
+								"registry",
+								"--log-level=DEBUG",
+								"--mirror-resolve-retries=3",
+								"--mirror-resolve-timeout=20ms",
+								fmt.Sprintf("--registry-addr=:%d", *s.values.Config.RegistryPort),
+								fmt.Sprintf("--router-addr=:%d", *s.values.Config.RouterPort),
+								fmt.Sprintf("--metrics-addr=:%d", *s.values.Config.MetricsPort),
+								"--containerd-sock=/run/containerd/containerd.sock",
+								"--containerd-namespace=k8s.io",
+								"--containerd-registry-config-path=/etc/containerd/certs.d",
+								"--bootstrap-kind=dns",
+								"--dns-bootstrap-domain=spegel-bootstrap.kube-system.svc.cluster.local.",
+								"--containerd-content-path=/var/lib/containerd/io.containerd.content.v1.content",
+								"--debug-web-enabled=true",
+							},
+							Env: []corev1.EnvVar{
+								{
+									Name: "DATA_DIR",
+								},
+								{
+									Name: "GOMEMLIMIT",
+									ValueFrom: &corev1.EnvVarSource{
+										ResourceFieldRef: &corev1.ResourceFieldSelector{Resource: "limits.memory"},
+									},
+								},
+								{
+									Name: "NODE_IP",
+									ValueFrom: &corev1.EnvVarSource{
+										FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"},
+									},
+								},
 							},
 							Ports: []corev1.ContainerPort{
 								{
-									ContainerPort: int32(5500),
+									ContainerPort: *s.values.Config.RegistryPort,
 									Name:          "registry",
 									Protocol:      corev1.ProtocolTCP,
 								},
 								{
-									ContainerPort: int32(5501),
+									ContainerPort: *s.values.Config.RouterPort,
 									Name:          "router",
 									Protocol:      corev1.ProtocolTCP,
 								},
 								{
-									ContainerPort: int32(9090),
+									ContainerPort: *s.values.Config.MetricsPort,
 									Name:          "metrics",
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
+							// ReadinessProbe: &corev1.Probe{
+							// 	ProbeHandler: corev1.ProbeHandler{
+							// 		HTTPGet: &corev1.HTTPGetAction{
+							// 			Host: "localhost",
+							// 			Path: "/readyz",
+							// 			Port: intstr.FromInt32(*s.values.Config.RegistryPort),
+							// 		},
+							// 	},
+							// },
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
-										Host: n.getIPVSAddress(),
-										Path: "/health",
-										Port: intstr.FromInt32(livenessProbePort),
+										Host: "localhost",
+										Path: "/livez",
+										Port: intstr.FromInt32(*s.values.Config.RegistryPort),
 									},
 								},
-								InitialDelaySeconds: int32(60),
-								TimeoutSeconds:      int32(5),
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									MountPath: "/run/xtables.lock",
-									Name:      "xtables-lock",
-									ReadOnly:  false,
+									MountPath: "/run/containerd/containerd.sock",
+									Name:      "containerd-sock",
 								},
 								{
-									MountPath: "/etc/coredns",
-									Name:      "config-volume",
-								},
-								{
-									MountPath: "/etc/kube-dns",
-									Name:      "kube-dns-config",
-								},
-								{
-									Name:      volumeMountNameCustomConfig,
-									MountPath: volumeMountPathCustomConfig,
+									MountPath: "/var/lib/containerd/io.containerd.content.v1.content",
+									Name:      "containerd-content",
 									ReadOnly:  true,
 								},
 							},
@@ -393,50 +443,20 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: "xtables-lock",
+							Name: "containerd-sock",
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/run/xtables.lock",
-									Type: &hostPathFileOrCreate,
+									Path: "/run/containerd/containerd.sock",
+									Type: ptr.To(corev1.HostPathSocket),
 								},
 							},
 						},
 						{
-							Name: "kube-dns-config",
+							Name: "containerd-content",
 							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "kube-dns",
-									},
-									Optional: ptr.To(true),
-								},
-							},
-						},
-						{
-							Name: "config-volume",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: configMap.Name,
-									},
-									Items: []corev1.KeyToPath{
-										{
-											Key:  configDataKey,
-											Path: "Corefile.base",
-										},
-									},
-								},
-							},
-						},
-						{
-							Name: volumeMountNameCustomConfig,
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: coredns.CustomConfigMapName,
-									},
-									DefaultMode: ptr.To[int32](420),
-									Optional:    ptr.To(true),
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/var/lib/containerd/io.containerd.content.v1.content",
+									Type: ptr.To(corev1.HostPathDirectory),
 								},
 							},
 						},
@@ -448,31 +468,12 @@ func (s *spegelCache) getSpegelDaemonSet() *appsv1.DaemonSet {
 	return spegelDaemonSet
 }
 
-/***
-          - name: registry
-            containerPort: {{ .Values.service.registry.port }}
-            {{- if not .Values.service.registry.usePreferSameNodeTrafficDistribution }}
-            hostPort: {{ .Values.service.registry.hostPort }}
-            {{- end }}
-            protocol: TCP
-          - name: router-tcp
-            containerPort: {{ .Values.service.router.port }}
-            protocol: TCP
-          - name: router-quic
-            containerPort: {{ .Values.service.router.port }}
-            protocol: UDP
-          - name: metrics
-            containerPort: {{ .Values.service.metrics.port }}
-            protocol: TCP
-
-**/
-
 func (s *spegelCache) getSpegelPeersDeployment(serverTlsSecretName, caBundleSecretName, clusterCAName string) *appsv1.Deployment {
 	spegelDeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "spegelpeers",
 			Namespace: s.namespace,
-			Labels:    getSeedLabelss(),
+			Labels:    getSeedLabels(),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas:             ptr.To[int32](2),

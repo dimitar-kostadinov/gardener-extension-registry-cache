@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 
 	extensionscontroller "github.com/gardener/gardener/extensions/pkg/controller"
 	extensionswebhook "github.com/gardener/gardener/extensions/pkg/webhook"
@@ -17,8 +16,6 @@ import (
 	"github.com/gardener/gardener/extensions/pkg/webhook/controlplane/genericmutator"
 	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
 	extensionsv1alpha1 "github.com/gardener/gardener/pkg/apis/extensions/v1alpha1"
-	"github.com/gardener/gardener/pkg/component/extensions/operatingsystemconfig/original/components/containerd"
-	"github.com/gardener/gardener/pkg/component/extensions/operatingsystemconfig/original/components/kubelet"
 	"github.com/gardener/gardener/pkg/utils"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -29,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/gardener/gardener-extension-registry-cache/pkg/apis/spegel"
-	spegelutils "github.com/gardener/gardener-extension-registry-cache/pkg/utils/spegel"
 )
 
 // NewEnsurer creates a new spegel configuration ensurer.
@@ -221,80 +217,80 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 	return nil
 }
 
-func (e *ensurer) EnsureAdditionalUnits(ctx context.Context, gctx extensionscontextwebhook.GardenContext, newUnits, _ *[]extensionsv1alpha1.Unit) error {
-	cluster, err := gctx.GetCluster(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get the cluster resource: %w", err)
-	}
+// func (e *ensurer) EnsureAdditionalUnits(ctx context.Context, gctx extensionscontextwebhook.GardenContext, newUnits, _ *[]extensionsv1alpha1.Unit) error {
+// 	cluster, err := gctx.GetCluster(ctx)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to get the cluster resource: %w", err)
+// 	}
 
-	if cluster.Shoot.DeletionTimestamp != nil {
-		e.logger.Info("Shoot has a deletion timestamp set, skipping the OperatingSystemConfig mutation", "shoot", client.ObjectKeyFromObject(cluster.Shoot))
-		return nil
-	}
+// 	if cluster.Shoot.DeletionTimestamp != nil {
+// 		e.logger.Info("Shoot has a deletion timestamp set, skipping the OperatingSystemConfig mutation", "shoot", client.ObjectKeyFromObject(cluster.Shoot))
+// 		return nil
+// 	}
 
-	extension := &extensionsv1alpha1.Extension{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "registry-spegel",
-			Namespace: cluster.ObjectMeta.Name,
-		},
-	}
-	if err := e.client.Get(ctx, client.ObjectKeyFromObject(extension), extension); err != nil {
-		return fmt.Errorf("failed to get extension '%s': %w", client.ObjectKeyFromObject(extension), err)
-	}
+// 	extension := &extensionsv1alpha1.Extension{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:      "registry-spegel",
+// 			Namespace: cluster.ObjectMeta.Name,
+// 		},
+// 	}
+// 	if err := e.client.Get(ctx, client.ObjectKeyFromObject(extension), extension); err != nil {
+// 		return fmt.Errorf("failed to get extension '%s': %w", client.ObjectKeyFromObject(extension), err)
+// 	}
 
-	if extension.Spec.ProviderConfig == nil {
-		return fmt.Errorf("extension '%s' does not have a .spec.providerConfig specified", client.ObjectKeyFromObject(extension))
-	}
+// 	if extension.Spec.ProviderConfig == nil {
+// 		return fmt.Errorf("extension '%s' does not have a .spec.providerConfig specified", client.ObjectKeyFromObject(extension))
+// 	}
 
-	spegelConfig := &api.SpegelConfig{}
-	if _, _, err := e.decoder.Decode(extension.Spec.ProviderConfig.Raw, nil, spegelConfig); err != nil {
-		return fmt.Errorf("failed to decode providerConfig of extension '%s': %w", client.ObjectKeyFromObject(extension), err)
-	}
+// 	spegelConfig := &api.SpegelConfig{}
+// 	if _, _, err := e.decoder.Decode(extension.Spec.ProviderConfig.Raw, nil, spegelConfig); err != nil {
+// 		return fmt.Errorf("failed to decode providerConfig of extension '%s': %w", client.ObjectKeyFromObject(extension), err)
+// 	}
 
-	ingress := spegelutils.ComputeIngressHost(cluster.Shoot.Status.TechnicalID, cluster.Seed.Spec.Ingress.Domain)
+// 	ingress := spegelutils.ComputeIngressHost(cluster.Shoot.Status.TechnicalID, cluster.Seed.Spec.Ingress.Domain)
 
-	*newUnits = extensionswebhook.EnsureUnitWithName(*newUnits, extensionsv1alpha1.Unit{
-		Name:    spegelUnitName,
-		Command: ptr.To(extensionsv1alpha1.CommandStart),
-		Enable:  ptr.To(true),
-		Content: ptr.To(`[Unit]
-Description=spegel daemon
-Documentation=https://github.com/spegel-org/spegel
-After=` + containerd.UnitName + `
-Requires=` + containerd.UnitName + `
-Before=` + kubelet.UnitName + `
-[Install]
-WantedBy=multi-user.target
-[Service]
-Restart=always
-RestartSec=5
-MemoryHigh=80M
-MemoryMax=100M
-ExecStart=` + v1beta1constants.OperatingSystemConfigFilePathBinaries + `/spegel \
-    ` + utils.Indent(strings.Join(getCLIFlags(spegelConfig, ingress), " \\\n"), 4) + "\n"),
-		FilePaths: []string{v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel"},
-	})
+// 	*newUnits = extensionswebhook.EnsureUnitWithName(*newUnits, extensionsv1alpha1.Unit{
+// 		Name:    spegelUnitName,
+// 		Command: ptr.To(extensionsv1alpha1.CommandStart),
+// 		Enable:  ptr.To(true),
+// 		Content: ptr.To(`[Unit]
+// Description=spegel daemon
+// Documentation=https://github.com/spegel-org/spegel
+// After=` + containerd.UnitName + `
+// Requires=` + containerd.UnitName + `
+// Before=` + kubelet.UnitName + `
+// [Install]
+// WantedBy=multi-user.target
+// [Service]
+// Restart=always
+// RestartSec=5
+// MemoryHigh=80M
+// MemoryMax=100M
+// ExecStart=` + v1beta1constants.OperatingSystemConfigFilePathBinaries + `/spegel \
+//     ` + utils.Indent(strings.Join(getCLIFlags(spegelConfig, ingress), " \\\n"), 4) + "\n"),
+// 		FilePaths: []string{v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel"},
+// 	})
 
-	*newUnits = extensionswebhook.EnsureUnitWithName(*newUnits, extensionsv1alpha1.Unit{
-		Name:    spegelMetricsUnitName,
-		Command: ptr.To(extensionsv1alpha1.CommandStart),
-		Enable:  ptr.To(true),
-		Content: ptr.To(`[Unit]
-Description=spegel metrics daemon
-Documentation=https://github.com/spegel-org/spegel
-After=` + spegelUnitName + `
-BindsTo=` + spegelUnitName + `
-[Install]
-WantedBy=multi-user.target ` + spegelUnitName + `
-[Service]
-Restart=always
-RestartSec=5
-ExecStart=` + v1beta1constants.OperatingSystemConfigFilePathBinaries + `/spegel_metrics.sh`),
-		FilePaths: []string{v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel_metrics.sh"},
-	})
+// 	*newUnits = extensionswebhook.EnsureUnitWithName(*newUnits, extensionsv1alpha1.Unit{
+// 		Name:    spegelMetricsUnitName,
+// 		Command: ptr.To(extensionsv1alpha1.CommandStart),
+// 		Enable:  ptr.To(true),
+// 		Content: ptr.To(`[Unit]
+// Description=spegel metrics daemon
+// Documentation=https://github.com/spegel-org/spegel
+// After=` + spegelUnitName + `
+// BindsTo=` + spegelUnitName + `
+// [Install]
+// WantedBy=multi-user.target ` + spegelUnitName + `
+// [Service]
+// Restart=always
+// RestartSec=5
+// ExecStart=` + v1beta1constants.OperatingSystemConfigFilePathBinaries + `/spegel_metrics.sh`),
+// 		FilePaths: []string{v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel_metrics.sh"},
+// 	})
 
-	return nil
-}
+// 	return nil
+// }
 
 // EnsureCRIConfig ensures the CRI config.
 func (e *ensurer) EnsureCRIConfig(ctx context.Context, gctx extensionscontextwebhook.GardenContext, newCRIConfig, _ *extensionsv1alpha1.CRIConfig) error {
