@@ -90,7 +90,7 @@ scrape_spegel_metrics`
 	spegelBootstrapTLSKeyFile = "/var/lib/spegel/certs/tls.key"
 )
 
-func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscontextwebhook.GardenContext, newFiles, _ *[]extensionsv1alpha1.File) error {
+func (e *ensurer) EnsureAdditionalProvisionFiles(ctx context.Context, gctx extensionscontextwebhook.GardenContext, newFiles, _ *[]extensionsv1alpha1.File) error {
 	cluster, err := gctx.GetCluster(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get the cluster resource: %w", err)
@@ -194,18 +194,18 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 		},
 	})
 
-	*newFiles = extensionswebhook.EnsureFileWithPath(*newFiles, extensionsv1alpha1.File{
-		Path:        v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel",
-		Permissions: ptr.To[uint32](0755),
-		Content: extensionsv1alpha1.FileContent{
-			ImageRef: &extensionsv1alpha1.FileContentImageRef{
-				//TODO:
-				//Image:           "ghcr.io/spegel-org/spegel:v0.0.28",
-				Image:           "registry.local.gardener.cloud:5001/spegel-org/spegel:v0.5.1-test", //"reg.seed-aws.i024114.shoot.dev.k8s-hana.ondemand.com/spegel-org/spegel:v0.2.0-test3",
-				FilePathInImage: "/app/spegel",
-			},
-		},
-	})
+	// *newFiles = extensionswebhook.EnsureFileWithPath(*newFiles, extensionsv1alpha1.File{
+	// 	Path:        v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel",
+	// 	Permissions: ptr.To[uint32](0755),
+	// 	Content: extensionsv1alpha1.FileContent{
+	// 		ImageRef: &extensionsv1alpha1.FileContentImageRef{
+	// 			//TODO:
+	// 			//Image:           "ghcr.io/spegel-org/spegel:v0.0.28",
+	// 			Image:           "registry.local.gardener.cloud:5001/spegel-org/spegel:v0.5.1-test", //"reg.seed-aws.i024114.shoot.dev.k8s-hana.ondemand.com/spegel-org/spegel:v0.2.0-test3",
+	// 			FilePathInImage: "/app/spegel",
+	// 		},
+	// 	},
+	// })
 
 	*newFiles = extensionswebhook.EnsureFileWithPath(*newFiles, extensionsv1alpha1.File{
 		Path:        v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel_metrics.sh",
@@ -221,7 +221,7 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 	return nil
 }
 
-func (e *ensurer) EnsureAdditionalUnits(ctx context.Context, gctx extensionscontextwebhook.GardenContext, newUnits, _ *[]extensionsv1alpha1.Unit) error {
+func (e *ensurer) EnsureAdditionalProvisionUnits(ctx context.Context, gctx extensionscontextwebhook.GardenContext, newUnits, _ *[]extensionsv1alpha1.Unit) error {
 	cluster, err := gctx.GetCluster(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get the cluster resource: %w", err)
@@ -263,6 +263,7 @@ Documentation=https://github.com/spegel-org/spegel
 After=` + containerd.UnitName + `
 Requires=` + containerd.UnitName + `
 Before=` + kubelet.UnitName + `
+Before=gardener-node-init.service
 [Install]
 WantedBy=multi-user.target
 [Service]
@@ -272,7 +273,7 @@ MemoryHigh=80M
 MemoryMax=100M
 ExecStart=` + v1beta1constants.OperatingSystemConfigFilePathBinaries + `/spegel \
     ` + utils.Indent(strings.Join(getCLIFlags(spegelConfig, ingress), " \\\n"), 4) + "\n"),
-		FilePaths: []string{v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel"},
+		//FilePaths: []string{v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel"},
 	})
 
 	*newUnits = extensionswebhook.EnsureUnitWithName(*newUnits, extensionsv1alpha1.Unit{
@@ -376,29 +377,30 @@ func (e *ensurer) EnsureCRIConfig(ctx context.Context, gctx extensionscontextweb
 
 	// #############
 
-	// What to TODO?: explicitly overwrite host.toml files in local setup
-	// "europe-docker.pkg.dev" , "gcr.io", "quay.io", "registry.k8s.io"
-	if cluster.Shoot.Name == "local" {
-		for _, upstream := range []string{"europe-docker.pkg.dev", "gcr.io", "quay.io", "registry.k8s.io"} {
-			cfg := extensionsv1alpha1.RegistryConfig{
-				Upstream: upstream,
-				Server:   ptr.To(fmt.Sprintf("https://%s", upstream)),
-				Hosts: []extensionsv1alpha1.RegistryHost{{
-					URL:          fmt.Sprintf("http://localhost:%d", *spegelConfig.RegistryPort),
-					Capabilities: []extensionsv1alpha1.RegistryCapability{extensionsv1alpha1.PullCapability, extensionsv1alpha1.ResolveCapability},
-				}},
-			}
-			i := slices.IndexFunc(newCRIConfig.Containerd.Registries, func(registryConfig extensionsv1alpha1.RegistryConfig) bool {
-				return registryConfig.Upstream == cfg.Upstream
-			})
+	// Included in the provider-local node image
+	// // What to TODO?: explicitly overwrite host.toml files in local setup
+	// // "europe-docker.pkg.dev" , "gcr.io", "quay.io", "registry.k8s.io" "registry.local.gardener.cloud:5001"
+	// if cluster.Shoot.Name == "local" {
+	// 	for _, upstream := range []string{"europe-docker.pkg.dev", "gcr.io", "quay.io", "registry.k8s.io", "registry.local.gardener.cloud:5001"} {
+	// 		cfg := extensionsv1alpha1.RegistryConfig{
+	// 			Upstream: upstream,
+	// 			Server:   ptr.To(fmt.Sprintf("https://%s", upstream)),
+	// 			Hosts: []extensionsv1alpha1.RegistryHost{{
+	// 				URL:          fmt.Sprintf("http://localhost:%d", *spegelConfig.RegistryPort),
+	// 				Capabilities: []extensionsv1alpha1.RegistryCapability{extensionsv1alpha1.PullCapability, extensionsv1alpha1.ResolveCapability},
+	// 			}},
+	// 		}
+	// 		i := slices.IndexFunc(newCRIConfig.Containerd.Registries, func(registryConfig extensionsv1alpha1.RegistryConfig) bool {
+	// 			return registryConfig.Upstream == cfg.Upstream
+	// 		})
 
-			if i == -1 {
-				newCRIConfig.Containerd.Registries = append(newCRIConfig.Containerd.Registries, cfg)
-			} else {
-				newCRIConfig.Containerd.Registries[i] = cfg
-			}
-		}
-	}
+	// 		if i == -1 {
+	// 			newCRIConfig.Containerd.Registries = append(newCRIConfig.Containerd.Registries, cfg)
+	// 		} else {
+	// 			newCRIConfig.Containerd.Registries[i] = cfg
+	// 		}
+	// 	}
+	// }
 
 	return nil
 }
@@ -413,7 +415,6 @@ func getCLIFlags(spegelConfig *api.SpegelConfig, ingress string) []string {
 		fmt.Sprintf("--metrics-addr=:%d", *spegelConfig.MetricsPort),
 		"--containerd-sock=/run/containerd/containerd.sock",
 		"--containerd-namespace=k8s.io",
-		"--containerd-registry-config-path=/etc/containerd/certs.d",
 		"--bootstrap-kind=external",
 		fmt.Sprintf("--external-bootstrap-url=https://%s/bootstrap-nodes", ingress),
 		fmt.Sprintf("--external-bootstrap-ca=%s", spegelBootstrapCAFile),
