@@ -51,17 +51,7 @@ type ensurer struct {
 
 const (
 	// spegelUnitName is the name of the spegel service unit.
-	spegelUnitName = "spegel.service"
-	// spegelMetricsUnitName is the name of the spegel metrics service unit.
-	spegelMetricsUnitName = "spegel-metrics.service"
-	// 	spegelConfiguration   = `caBundle: %s
-	// server: %s`
-	// defaultHostsToml is the content of default registry host namespace if no other namespace matches.
-	defaultHostsToml = `# managed by gardener-extension-registry-cache
-[host."http://localhost:%d"]
-  capabilities = ["pull", "resolve"]
-`
-
+	spegelUnitName            = "spegel.service"
 	spegelBootstrapCAFile     = "/var/lib/spegel/certs/ca.crt"
 	spegelBootstrapTLSCrtFile = "/var/lib/spegel/certs/tls.crt"
 	spegelBootstrapTLSKeyFile = "/var/lib/spegel/certs/tls.key"
@@ -96,17 +86,6 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 	if _, _, err := e.decoder.Decode(extension.Spec.ProviderConfig.Raw, nil, spegelConfig); err != nil {
 		return fmt.Errorf("failed to decode providerConfig of extension '%s': %w", client.ObjectKeyFromObject(extension), err)
 	}
-
-	*newFiles = extensionswebhook.EnsureFileWithPath(*newFiles, extensionsv1alpha1.File{
-		Path:        "/etc/containerd/certs.d/_default/hosts.toml",
-		Permissions: ptr.To[uint32](0644),
-		Content: extensionsv1alpha1.FileContent{
-			Inline: &extensionsv1alpha1.FileContentInline{
-				Encoding: string(extensionsv1alpha1.B64FileCodecID),
-				Data:     utils.EncodeBase64([]byte(fmt.Sprintf(defaultHostsToml, *spegelConfig.RegistryPort))),
-			},
-		},
-	})
 
 	spegelStatus, err := e.getProviderStatus(ctx, cluster)
 	if err != nil {
@@ -183,17 +162,6 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 			},
 		},
 	})
-
-	// *newFiles = extensionswebhook.EnsureFileWithPath(*newFiles, extensionsv1alpha1.File{
-	// 	Path:        v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel_metrics.sh",
-	// 	Permissions: ptr.To[uint32](0755),
-	// 	Content: extensionsv1alpha1.FileContent{
-	// 		Inline: &extensionsv1alpha1.FileContentInline{
-	// 			Encoding: string(extensionsv1alpha1.B64FileCodecID),
-	// 			Data:     utils.EncodeBase64([]byte(fmt.Sprintf(metricsScraperScript, *spegelConfig.MetricsPort))),
-	// 		},
-	// 	},
-	// })
 
 	return nil
 }
@@ -319,33 +287,50 @@ func (e *ensurer) EnsureCRIConfig(ctx context.Context, gctx extensionscontextweb
 		}
 	}
 
+	spegelRegistryHost := extensionsv1alpha1.RegistryHost{
+		URL:          fmt.Sprintf("http://localhost:%d", *spegelConfig.RegistryPort),
+		Capabilities: []extensionsv1alpha1.RegistryCapability{extensionsv1alpha1.PullCapability},
+	}
+	if *spegelConfig.ResolveTags {
+		spegelRegistryHost.Capabilities = append(spegelRegistryHost.Capabilities, extensionsv1alpha1.ResolveCapability)
+	}
+
+	// add _default hosts.toml
+	i = slices.IndexFunc(newCRIConfig.Containerd.Registries, func(registryConfig extensionsv1alpha1.RegistryConfig) bool {
+		return registryConfig.Upstream == "_default"
+	})
+	if i == -1 {
+		newCRIConfig.Containerd.Registries = append(newCRIConfig.Containerd.Registries, extensionsv1alpha1.RegistryConfig{
+			Upstream: "_default",
+			Hosts:    []extensionsv1alpha1.RegistryHost{spegelRegistryHost},
+		})
+	} else {
+		newCRIConfig.Containerd.Registries[i] = extensionsv1alpha1.RegistryConfig{
+			Upstream: "_default",
+			Hosts:    []extensionsv1alpha1.RegistryHost{spegelRegistryHost},
+		}
+	}
+
 	// inject Spegel configuration
 	// TODO: What happens if another webhook is then executed? reinvocationPolicy: IfNeeded?
 	// TODO: What if ReadinessProbe=true, the spegel binary is download as imageRef file?
 	for i := range newCRIConfig.Containerd.Registries {
-		if newCRIConfig.Containerd.Registries[i].Hosts[0].URL != fmt.Sprintf("http://localhost:%d", *spegelConfig.RegistryPort) { //TODO: cache & mirror webhooks should be updated to not overwrite spegel configuration
-			newCRIConfig.Containerd.Registries[i].Hosts = append([]extensionsv1alpha1.RegistryHost{
-				{
-					URL:          fmt.Sprintf("http://localhost:%d", *spegelConfig.RegistryPort),
-					Capabilities: []extensionsv1alpha1.RegistryCapability{extensionsv1alpha1.PullCapability, extensionsv1alpha1.ResolveCapability},
-				},
-			}, newCRIConfig.Containerd.Registries[i].Hosts...)
+		if newCRIConfig.Containerd.Registries[i].Hosts[0].URL != spegelRegistryHost.URL { //TODO: cache & mirror webhooks should be updated to not overwrite spegel configuration
+			newCRIConfig.Containerd.Registries[i].Hosts = append([]extensionsv1alpha1.RegistryHost{spegelRegistryHost}, newCRIConfig.Containerd.Registries[i].Hosts...)
+		} else { // replace
+			newCRIConfig.Containerd.Registries[i].Hosts[0] = spegelRegistryHost
 		}
 	}
 
 	// #############
-
-	// What to TODO?: explicitly overwrite host.toml files in local setup
+	// What to TODO?: explicitly overwrite hosts.toml files in local setup
 	// "europe-docker.pkg.dev" , "gcr.io", "quay.io", "registry.k8s.io"
 	if cluster.Shoot.Name == "local" {
 		for _, upstream := range []string{"europe-docker.pkg.dev", "gcr.io", "quay.io", "registry.k8s.io"} {
 			cfg := extensionsv1alpha1.RegistryConfig{
 				Upstream: upstream,
 				Server:   ptr.To(fmt.Sprintf("https://%s", upstream)),
-				Hosts: []extensionsv1alpha1.RegistryHost{{
-					URL:          fmt.Sprintf("http://localhost:%d", *spegelConfig.RegistryPort),
-					Capabilities: []extensionsv1alpha1.RegistryCapability{extensionsv1alpha1.PullCapability, extensionsv1alpha1.ResolveCapability},
-				}},
+				Hosts:    []extensionsv1alpha1.RegistryHost{spegelRegistryHost},
 			}
 			i := slices.IndexFunc(newCRIConfig.Containerd.Registries, func(registryConfig extensionsv1alpha1.RegistryConfig) bool {
 				return registryConfig.Upstream == cfg.Upstream

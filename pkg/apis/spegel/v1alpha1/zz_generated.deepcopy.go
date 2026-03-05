@@ -32,6 +32,11 @@ func (in *SpegelConfig) DeepCopyInto(out *SpegelConfig) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.ResolveTags != nil {
+		in, out := &in.ResolveTags, &out.ResolveTags
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 

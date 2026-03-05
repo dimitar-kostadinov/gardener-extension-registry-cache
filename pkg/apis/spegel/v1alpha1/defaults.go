@@ -17,4 +17,7 @@ func SetDefaults_SpegelConfig(spegelConfig *SpegelConfig) {
 	if spegelConfig.MetricsPort == nil {
 		spegelConfig.MetricsPort = ptr.To[int32](19090)
 	}
+	if spegelConfig.ResolveTags == nil {
+		spegelConfig.ResolveTags = ptr.To(true)
+	}
 }

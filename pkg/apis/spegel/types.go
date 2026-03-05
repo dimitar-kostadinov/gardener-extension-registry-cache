@@ -20,6 +20,8 @@ type SpegelConfig struct {
 	RouterPort *int32
 	// MetricsPort is the metrics port on each Node.
 	MetricsPort *int32
+	// ResolveTags when true Spegel will resolve tags to digests.
+	ResolveTags *bool
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

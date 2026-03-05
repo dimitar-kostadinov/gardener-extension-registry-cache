@@ -51,6 +51,7 @@ func autoConvert_v1alpha1_SpegelConfig_To_spegel_SpegelConfig(in *SpegelConfig, 
 	out.RegistryPort = (*int32)(unsafe.Pointer(in.RegistryPort))
 	out.RouterPort = (*int32)(unsafe.Pointer(in.RouterPort))
 	out.MetricsPort = (*int32)(unsafe.Pointer(in.MetricsPort))
+	out.ResolveTags = (*bool)(unsafe.Pointer(in.ResolveTags))
 	return nil
 }
 
@@ -63,6 +64,7 @@ func autoConvert_spegel_SpegelConfig_To_v1alpha1_SpegelConfig(in *spegel.SpegelC
 	out.RegistryPort = (*int32)(unsafe.Pointer(in.RegistryPort))
 	out.RouterPort = (*int32)(unsafe.Pointer(in.RouterPort))
 	out.MetricsPort = (*int32)(unsafe.Pointer(in.MetricsPort))
+	out.ResolveTags = (*bool)(unsafe.Pointer(in.ResolveTags))
 	return nil
 }
 

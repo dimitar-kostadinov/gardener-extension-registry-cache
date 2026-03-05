@@ -65,6 +65,19 @@ int32
 Defaults to 19090.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>resolveTags</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ResolveTags when true Spegel will resolve tags to digests.
+Defaults to true.</p>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="spegel.extensions.gardener.cloud/v1alpha1.SpegelStatus">SpegelStatus
