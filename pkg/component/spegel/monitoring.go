@@ -6,6 +6,7 @@ package spegel
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
@@ -21,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func deployMonitoringScrapeConfig(ctx context.Context, client client.Client, namespace string) error {
+func deployMonitoringScrapeConfig(ctx context.Context, client client.Client, namespace string, metricsPort int32) error {
 	scrapeConfig := emptyScrapeConfig(namespace)
 	if _, err := controllerutils.GetAndCreateOrMergePatch(ctx, client, scrapeConfig, func() error {
 		metav1.SetMetaDataLabel(&scrapeConfig.ObjectMeta, "component", "registry-spegel")
@@ -31,57 +32,49 @@ func deployMonitoringScrapeConfig(ctx context.Context, client client.Client, nam
 			ScrapeTimeout: ptr.To(monitoringv1.Duration("10s")),
 			Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
 			// This is needed because the kubelets' certificates are not are generated for a specific pod IP
-			TLSConfig: &monitoringv1.SafeTLSConfig{InsecureSkipVerify: ptr.To(true)},
+			TLSConfig: &monitoringv1.SafeTLSConfig{InsecureSkipVerify: ptr.To(true)}, // TODO: provide cluster CA
 			Authorization: &monitoringv1.SafeAuthorization{Credentials: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: "shoot-access-prometheus-shoot"},
 				Key:                  "token",
 			}},
 			KubernetesSDConfigs: []monitoringv1alpha1.KubernetesSDConfig{{
-				APIServer:  ptr.To("https://" + v1beta1constants.DeploymentNameKubeAPIServer + ":" + strconv.Itoa(kubeapiserverconstants.Port)),
-				Role:       monitoringv1alpha1.KubernetesRoleEndpoint,
-				Namespaces: &monitoringv1alpha1.NamespaceDiscovery{Names: []string{metav1.NamespaceSystem}},
+				APIServer:       ptr.To("https://" + v1beta1constants.DeploymentNameKubeAPIServer + ":" + strconv.Itoa(kubeapiserverconstants.Port)),
+				Role:            monitoringv1alpha1.KubernetesRoleNode,
+				FollowRedirects: ptr.To(true),
+				Namespaces:      &monitoringv1alpha1.NamespaceDiscovery{Names: []string{metav1.NamespaceSystem}},
 				Authorization: &monitoringv1.SafeAuthorization{Credentials: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{Name: "shoot-access-prometheus-shoot"},
 					Key:                  "token",
 				}},
-				// This is needed because we do not fetch the correct cluster CA bundle right now
-				TLSConfig:       &monitoringv1.SafeTLSConfig{InsecureSkipVerify: ptr.To(true)},
-				FollowRedirects: ptr.To(true),
+				TLSConfig: &monitoringv1.SafeTLSConfig{InsecureSkipVerify: ptr.To(true)}, // TODO: provide cluster CA
 			}},
 			RelabelConfigs: []monitoringv1.RelabelConfig{
 				{
 					Action:      "replace",
-					Replacement: ptr.To("registry-cache-metrics"),
+					Replacement: ptr.To("registry-spegel-metrics"),
 					TargetLabel: "job",
 				},
 				{
-					SourceLabels: []monitoringv1.LabelName{"__meta_kubernetes_service_name", "__meta_kubernetes_endpoint_port_name"},
-					Action:       "keep",
-					Regex:        `node-exporter;metrics`,
-				},
-				{
 					Action: "labelmap",
-					Regex:  `__meta_kubernetes_service_label_(.+)`,
+					Regex:  `__meta_kubernetes_node_label_(.+)`,
 				},
 				{
-					SourceLabels: []monitoringv1.LabelName{"__meta_kubernetes_pod_name"},
-					TargetLabel:  "pod",
-				},
-				{
-					SourceLabels: []monitoringv1.LabelName{"__meta_kubernetes_pod_node_name"},
-					TargetLabel:  "node",
+					SourceLabels: []monitoringv1.LabelName{"__meta_kubernetes_node_name"},
+					TargetLabel:  "kubernetes_node",
 				},
 				{
 					TargetLabel: "__address__",
-					Action:      "replace",
 					Replacement: ptr.To(v1beta1constants.DeploymentNameKubeAPIServer + ":" + strconv.Itoa(kubeapiserverconstants.Port)),
 				},
 				{
-					SourceLabels: []monitoringv1.LabelName{"__meta_kubernetes_pod_name", "__meta_kubernetes_pod_container_port_number"},
-					Action:       "replace",
+					SourceLabels: []monitoringv1.LabelName{"__meta_kubernetes_node_name"},
+					Regex:        `(.+)`,
 					TargetLabel:  "__metrics_path__",
-					Regex:        `(.+);(.+)`,
-					Replacement:  ptr.To("/api/v1/namespaces/kube-system/pods/${1}:${2}/proxy/metrics"),
+					Replacement:  ptr.To(fmt.Sprintf("/api/v1/nodes/${1}:%d/proxy/metrics", metricsPort)),
+				},
+				{
+					TargetLabel: "type",
+					Replacement: ptr.To("shoot"),
 				},
 			},
 			MetricRelabelConfigs: monitoringutils.StandardMetricRelabelConfig("spegel_.+|http_requests_.+|http_response_.+"),

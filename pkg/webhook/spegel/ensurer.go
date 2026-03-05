@@ -61,30 +61,7 @@ const (
 [host."http://localhost:%d"]
   capabilities = ["pull", "resolve"]
 `
-	metricsScraperScript = `#!/bin/bash
-set -euo pipefail
 
-function scrape_spegel_metrics {
-  while true
-  do
-    if curl --request GET -sL --url 'http://localhost:%d/metrics' --output "$output_file.tmp"; then
-      if [ -f "$output_file.tmp" ]; then
-        mv "$output_file.tmp" "$output_file"
-      else
-        echo "file $output_file.tmp is missing"
-      fi
-    else
-      echo "curl failure: $?"
-    fi
-    echo "sleep"
-    sleep $SLEEP_SECONDS
-  done
-}
-
-output_file="var/lib/node-exporter/textfile-collector/spegel.prom"
-SLEEP_SECONDS=5
-echo "Start scraping spegel metrics"
-scrape_spegel_metrics`
 	spegelBootstrapCAFile     = "/var/lib/spegel/certs/ca.crt"
 	spegelBootstrapTLSCrtFile = "/var/lib/spegel/certs/tls.crt"
 	spegelBootstrapTLSKeyFile = "/var/lib/spegel/certs/tls.key"
@@ -207,16 +184,16 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 		},
 	})
 
-	*newFiles = extensionswebhook.EnsureFileWithPath(*newFiles, extensionsv1alpha1.File{
-		Path:        v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel_metrics.sh",
-		Permissions: ptr.To[uint32](0755),
-		Content: extensionsv1alpha1.FileContent{
-			Inline: &extensionsv1alpha1.FileContentInline{
-				Encoding: string(extensionsv1alpha1.B64FileCodecID),
-				Data:     utils.EncodeBase64([]byte(fmt.Sprintf(metricsScraperScript, *spegelConfig.MetricsPort))),
-			},
-		},
-	})
+	// *newFiles = extensionswebhook.EnsureFileWithPath(*newFiles, extensionsv1alpha1.File{
+	// 	Path:        v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel_metrics.sh",
+	// 	Permissions: ptr.To[uint32](0755),
+	// 	Content: extensionsv1alpha1.FileContent{
+	// 		Inline: &extensionsv1alpha1.FileContentInline{
+	// 			Encoding: string(extensionsv1alpha1.B64FileCodecID),
+	// 			Data:     utils.EncodeBase64([]byte(fmt.Sprintf(metricsScraperScript, *spegelConfig.MetricsPort))),
+	// 		},
+	// 	},
+	// })
 
 	return nil
 }
@@ -273,24 +250,6 @@ MemoryMax=100M
 ExecStart=` + v1beta1constants.OperatingSystemConfigFilePathBinaries + `/spegel \
     ` + utils.Indent(strings.Join(getCLIFlags(spegelConfig, ingress), " \\\n"), 4) + "\n"),
 		FilePaths: []string{v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel"},
-	})
-
-	*newUnits = extensionswebhook.EnsureUnitWithName(*newUnits, extensionsv1alpha1.Unit{
-		Name:    spegelMetricsUnitName,
-		Command: ptr.To(extensionsv1alpha1.CommandStart),
-		Enable:  ptr.To(true),
-		Content: ptr.To(`[Unit]
-Description=spegel metrics daemon
-Documentation=https://github.com/spegel-org/spegel
-After=` + spegelUnitName + `
-BindsTo=` + spegelUnitName + `
-[Install]
-WantedBy=multi-user.target ` + spegelUnitName + `
-[Service]
-Restart=always
-RestartSec=5
-ExecStart=` + v1beta1constants.OperatingSystemConfigFilePathBinaries + `/spegel_metrics.sh`),
-		FilePaths: []string{v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel_metrics.sh"},
 	})
 
 	return nil
@@ -413,7 +372,6 @@ func getCLIFlags(spegelConfig *api.SpegelConfig, ingress string) []string {
 		fmt.Sprintf("--metrics-addr=:%d", *spegelConfig.MetricsPort),
 		"--containerd-sock=/run/containerd/containerd.sock",
 		"--containerd-namespace=k8s.io",
-		"--containerd-registry-config-path=/etc/containerd/certs.d",
 		"--bootstrap-kind=external",
 		fmt.Sprintf("--external-bootstrap-url=https://%s/bootstrap-nodes", ingress),
 		fmt.Sprintf("--external-bootstrap-ca=%s", spegelBootstrapCAFile),

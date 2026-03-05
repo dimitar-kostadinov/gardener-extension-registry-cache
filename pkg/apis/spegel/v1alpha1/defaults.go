@@ -9,12 +9,12 @@ import "k8s.io/utils/ptr"
 // SetDefaults_SpegelConfig sets the defaults ports.
 func SetDefaults_SpegelConfig(spegelConfig *SpegelConfig) {
 	if spegelConfig.RegistryPort == nil {
-		spegelConfig.RegistryPort = ptr.To[int32](5000)
+		spegelConfig.RegistryPort = ptr.To[int32](15500)
 	}
 	if spegelConfig.RouterPort == nil {
-		spegelConfig.RouterPort = ptr.To[int32](5001)
+		spegelConfig.RouterPort = ptr.To[int32](15501)
 	}
 	if spegelConfig.MetricsPort == nil {
-		spegelConfig.MetricsPort = ptr.To[int32](9090)
+		spegelConfig.MetricsPort = ptr.To[int32](19090)
 	}
 }

@@ -54,6 +54,8 @@ type Values struct {
 	Image string
 	//Domain is the speggel peers ingress domain
 	Domain string
+	//MetricsPort it the metrics
+	MetricsPort int32
 }
 
 // Interface is an interface for managing Registry Caches.
@@ -131,7 +133,7 @@ func (s *spegelCache) Deploy(ctx context.Context) error {
 		return fmt.Errorf("failed to create ManagedResource for Shoot: %w", err)
 	}
 
-	if err := deployMonitoringScrapeConfig(ctx, s.client, s.namespace); err != nil {
+	if err := deployMonitoringScrapeConfig(ctx, s.client, s.namespace, s.values.MetricsPort); err != nil {
 		return fmt.Errorf("failed to deploy monitoring config: %w", err)
 	}
 

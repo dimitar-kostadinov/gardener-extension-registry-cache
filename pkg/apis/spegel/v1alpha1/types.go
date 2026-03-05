@@ -16,17 +16,17 @@ type SpegelConfig struct {
 
 	// RegistryPort is the port that serves the OCI registry on each Node.
 	// `registryPort` should be a valid port number (1-65535, inclusive).
-	// Defaults to 5000.
+	// Defaults to 15500.
 	// +optional
 	RegistryPort *int32 `json:"registryPort,omitempty"`
 	// RouterPort is the port for P2P router on each Node.
 	// `routerPort` should be a valid port number (1-65535, inclusive).
-	// Defaults to 5001.
+	// Defaults to 15501.
 	// +optional
 	RouterPort *int32 `json:"routerPort,omitempty"`
 	// MetricsPort is the metrics port on each Node.
 	// `metricsPort` should be a valid port number (1-65535, inclusive).
-	// Defaults to 9090.
+	// Defaults to 19090.
 	// +optional
 	MetricsPort *int32 `json:"metricsPort,omitempty"`
 }

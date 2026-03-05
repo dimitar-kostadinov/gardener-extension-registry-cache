@@ -43,10 +43,10 @@ func AddToManager(ctx context.Context, mgr manager.Manager) error {
 // AddToManagerWithOptions adds a controller with the given Options to the given manager.
 // The opts.Reconciler is being set with a newly instantiated actuator.
 func AddToManagerWithOptions(ctx context.Context, mgr manager.Manager, opts AddOptions) error {
-	_ = serializer.NewCodecFactory(mgr.GetScheme(), serializer.EnableStrict).UniversalDecoder()
+	decoder := serializer.NewCodecFactory(mgr.GetScheme(), serializer.EnableStrict).UniversalDecoder()
 
 	return extension.Add(mgr, extension.AddArgs{
-		Actuator:          NewActuator(mgr.GetClient()),
+		Actuator:          NewActuator(mgr.GetClient(), decoder),
 		ControllerOptions: opts.ControllerOptions,
 		Name:              ControllerName,
 		FinalizerSuffix:   FinalizerSuffix,

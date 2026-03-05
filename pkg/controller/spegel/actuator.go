@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/gardener/gardener-extension-registry-cache/imagevector"
+	api "github.com/gardener/gardener-extension-registry-cache/pkg/apis/spegel"
 	"github.com/gardener/gardener-extension-registry-cache/pkg/apis/spegel/v1alpha1"
 	"github.com/gardener/gardener-extension-registry-cache/pkg/component/spegel"
 	"github.com/gardener/gardener-extension-registry-cache/pkg/secrets"
@@ -28,14 +29,16 @@ import (
 )
 
 // NewActuator returns an actuator responsible for registry-spegel Extension resources.
-func NewActuator(client client.Client) extension.Actuator {
+func NewActuator(client client.Client, decoder runtime.Decoder) extension.Actuator {
 	return &actuator{
-		client: client,
+		client:  client,
+		decoder: decoder,
 	}
 }
 
 type actuator struct {
-	client client.Client
+	client  client.Client
+	decoder runtime.Decoder
 }
 
 // Reconcile the Extension resource.
@@ -53,6 +56,10 @@ func (a *actuator) Reconcile(ctx context.Context, logger logr.Logger, ex *extens
 	if ex.Spec.ProviderConfig == nil {
 		return fmt.Errorf("providerConfig is required for the registry-spegel extension")
 	}
+	spegelConfig := &api.SpegelConfig{}
+	if err := runtime.DecodeInto(a.decoder, ex.Spec.ProviderConfig.Raw, spegelConfig); err != nil {
+		return fmt.Errorf("failed to decode provider config: %w", err)
+	}
 
 	image, err := imagevector.ImageVector().FindImage("spegel-peers")
 	if err != nil {
@@ -68,8 +75,9 @@ func (a *actuator) Reconcile(ctx context.Context, logger logr.Logger, ex *extens
 	}
 
 	spegelCache := spegel.New(a.client, namespace, secretsManager, spegel.Values{
-		Image:  image.String(),
-		Domain: ingress,
+		Image:       image.String(),
+		Domain:      ingress,
+		MetricsPort: *spegelConfig.MetricsPort,
 	})
 	if err = spegelCache.Deploy(ctx); err != nil {
 		return fmt.Errorf("failed to deploy the spegel cache component: %w", err)
