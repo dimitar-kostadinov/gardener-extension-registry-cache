@@ -14,7 +14,7 @@ patches:
         imageVectorOverwrite:
           images:
           - name: spegel-peers
-            ref: registry.local.gardener.cloud:5001/local-skaffold_gardener-extension-registry-cache-spegel-peers:v0.20.0-9-g3d6800c7-dirty@sha256:e7b19d02f3ca4ce12bc14079670506c1a6b3f1c24d205b51f85aa2dfb132e6d8
+            ref: registry.local.gardener.cloud:5001/local-skaffold_gardener-extension-registry-cache-spegel-peers:v0.20.0-10-ga2a51439-dirty@sha256:99faa1e3bd947a7b16ca64a7695a14eec4fdea46ac4076356c02f7c1bbc1b0b0
   target:
     group: core.gardener.cloud
     kind: ControllerDeployment

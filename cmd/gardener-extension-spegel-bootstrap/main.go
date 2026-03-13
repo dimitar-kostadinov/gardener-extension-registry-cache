@@ -10,14 +10,12 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
@@ -71,14 +69,14 @@ func peerHandler(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
-	var ips []net.IPAddr
+	var ips []netip.Addr
 	for _, node := range nodeList.Items {
 		for _, addr := range node.Status.Addresses {
 			if addr.Type == corev1.NodeInternalIP {
 				if ip, err := netip.ParseAddr(addr.Address); err == nil {
-					ips = append(ips, net.IPAddr{IP: net.IP(ip.AsSlice()).To16(), Zone: ip.Zone()})
+					ips = append(ips, ip)
 				}
-				break
+				//break TODO: check how many internal IPs exist for dual stack.
 			}
 		}
 		//zone, _ = node.Labels["topology.kubernetes.io/zone"]
@@ -91,8 +89,8 @@ func peerHandler(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
-	slices.SortFunc(ips, func(a, b net.IPAddr) int {
-		return strings.Compare(a.String(), b.String())
+	slices.SortFunc(ips, func(a, b netip.Addr) int {
+		return a.Compare(b)
 	})
 	log.Info("IPAddr", "ips", ips)
 	if len(ips) > limit {
@@ -107,6 +105,7 @@ func peerHandler(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
+	fmt.Println("ipsBytes:", string(ipsBytes))
 	w.Header().Add("Content-Type", "application/json")
 	_, err = w.Write(ipsBytes)
 	if err != nil {
