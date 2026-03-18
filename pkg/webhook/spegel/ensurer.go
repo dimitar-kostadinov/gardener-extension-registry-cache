@@ -55,6 +55,9 @@ const (
 	spegelBootstrapCAFile     = "/var/lib/spegel/certs/ca.crt"
 	spegelBootstrapTLSCrtFile = "/var/lib/spegel/certs/tls.crt"
 	spegelBootstrapTLSKeyFile = "/var/lib/spegel/certs/tls.key"
+	spegelEnvFile             = "/var/lib/spegel/env"
+	hostIPVar                 = "HOST_IP"
+	hostIPPlaceholder         = "<<HOST_IP>>"
 )
 
 func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscontextwebhook.GardenContext, newFiles, _ *[]extensionsv1alpha1.File) error {
@@ -118,6 +121,16 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 	}
 
 	*newFiles = extensionswebhook.EnsureFileWithPath(*newFiles, extensionsv1alpha1.File{
+		Path:        spegelEnvFile,
+		Permissions: ptr.To[uint32](0600),
+		Content: extensionsv1alpha1.FileContent{
+			Inline: &extensionsv1alpha1.FileContentInline{
+				Data: fmt.Sprintf("%s=%s", hostIPVar, hostIPPlaceholder),
+			},
+		},
+	})
+
+	*newFiles = extensionswebhook.EnsureFileWithPath(*newFiles, extensionsv1alpha1.File{
 		Path:        spegelBootstrapCAFile,
 		Permissions: ptr.To[uint32](0600),
 		Content: extensionsv1alpha1.FileContent{
@@ -157,7 +170,7 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 			ImageRef: &extensionsv1alpha1.FileContentImageRef{
 				//TODO:
 				//Image:           "ghcr.io/spegel-org/spegel:v0.0.28",
-				Image:           "registry.local.gardener.cloud:5001/spegel-org/spegel:v0.5.3-test", //"reg.seed-aws.i024114.shoot.dev.k8s-hana.ondemand.com/spegel-org/spegel:v0.2.0-test3",
+				Image:           "registry.local.gardener.cloud:5001/spegel-org/spegel:v0.5.7-test", //"reg.seed-aws.i024114.shoot.dev.k8s-hana.ondemand.com/spegel-org/spegel:v0.2.0-test3",
 				FilePathInImage: "/app/spegel",
 			},
 		},
@@ -215,6 +228,9 @@ Restart=always
 RestartSec=5
 MemoryHigh=80M
 MemoryMax=100M
+ExecStartPre=/bin/sh -c 'sed -i "s/` + hostIPPlaceholder + `/$(hostname -i)/g" ` + spegelEnvFile + `'
+ExecStartPre=/bin/sh -c 'find /etc/containerd/certs.d -type f -name "*.toml" | xargs sed -i "s/` + hostIPPlaceholder + `/$(hostname -i)/g"'
+EnvironmentFile=` + spegelEnvFile + `
 ExecStart=` + v1beta1constants.OperatingSystemConfigFilePathBinaries + `/spegel \
     ` + utils.Indent(strings.Join(getCLIFlags(spegelConfig, ingress), " \\\n"), 4) + "\n"),
 		FilePaths: []string{v1beta1constants.OperatingSystemConfigFilePathBinaries + "/spegel"},
@@ -288,7 +304,7 @@ func (e *ensurer) EnsureCRIConfig(ctx context.Context, gctx extensionscontextweb
 	}
 
 	spegelRegistryHost := extensionsv1alpha1.RegistryHost{
-		URL:          fmt.Sprintf("http://localhost:%d", *spegelConfig.RegistryPort),
+		URL:          fmt.Sprintf("http://%s:%d", hostIPPlaceholder, *spegelConfig.RegistryPort),
 		Capabilities: []extensionsv1alpha1.RegistryCapability{extensionsv1alpha1.PullCapability},
 	}
 	if *spegelConfig.ResolveTags {
@@ -352,9 +368,9 @@ func getCLIFlags(spegelConfig *api.SpegelConfig, ingress string) []string {
 		"--log-level=DEBUG",
 		"--mirror-resolve-retries=3",
 		"--mirror-resolve-timeout=20ms",
-		fmt.Sprintf("--registry-addr=:%d", *spegelConfig.RegistryPort),
-		fmt.Sprintf("--router-addr=:%d", *spegelConfig.RouterPort),
-		fmt.Sprintf("--metrics-addr=:%d", *spegelConfig.MetricsPort),
+		fmt.Sprintf("--registry-addr=${%s}:%d", hostIPVar, *spegelConfig.RegistryPort),
+		fmt.Sprintf("--router-addr=${%s}:%d", hostIPVar, *spegelConfig.RouterPort),
+		fmt.Sprintf("--metrics-addr=${%s}:%d", hostIPVar, *spegelConfig.MetricsPort),
 		"--containerd-sock=/run/containerd/containerd.sock",
 		"--containerd-namespace=k8s.io",
 		"--bootstrap-kind=external",

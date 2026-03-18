@@ -76,7 +76,7 @@ func peerHandler(w http.ResponseWriter, _ *http.Request) {
 				if ip, err := netip.ParseAddr(addr.Address); err == nil {
 					ips = append(ips, ip)
 				}
-				//break TODO: check how many internal IPs exist for dual stack.
+				break //TODO: check how many internal IPs exist for dual stack.
 			}
 		}
 		//zone, _ = node.Labels["topology.kubernetes.io/zone"]
