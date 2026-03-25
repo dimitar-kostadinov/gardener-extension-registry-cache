@@ -31,6 +31,7 @@ build:
             - pkg/component/registrycaches/templates/config.yml.tpl
             - pkg/component/registrycacheservices
             - pkg/component/spegel
+            - pkg/component/spegel/monitoring/dashboard.json
             - pkg/constants
             - pkg/controller/cache
             - pkg/controller/mirror

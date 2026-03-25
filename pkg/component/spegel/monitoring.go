@@ -6,6 +6,7 @@ package spegel
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"strconv"
 
@@ -22,7 +23,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var (
+	//go:embed monitoring/dashboard.json
+	dashboard string
+)
+
 func deployMonitoringScrapeConfig(ctx context.Context, client client.Client, namespace string, metricsPort int32) error {
+	dashboardsConfigMap := emptyDashboardsConfigMap(namespace)
+	if _, err := controllerutils.GetAndCreateOrMergePatch(ctx, client, dashboardsConfigMap, func() error {
+		metav1.SetMetaDataLabel(&dashboardsConfigMap.ObjectMeta, "component", "registry-spegel")
+		metav1.SetMetaDataLabel(&dashboardsConfigMap.ObjectMeta, "dashboard.monitoring.gardener.cloud/shoot", "true")
+		dashboardsConfigMap.Data = map[string]string{"registry-spegel.dashboard.json": dashboard}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	scrapeConfig := emptyScrapeConfig(namespace)
 	if _, err := controllerutils.GetAndCreateOrMergePatch(ctx, client, scrapeConfig, func() error {
 		metav1.SetMetaDataLabel(&scrapeConfig.ObjectMeta, "component", "registry-spegel")
@@ -88,7 +104,14 @@ func deployMonitoringScrapeConfig(ctx context.Context, client client.Client, nam
 }
 
 func destroyMonitoringScrapeConfig(ctx context.Context, client client.Client, namespace string) error {
-	return kubernetesutils.DeleteObjects(ctx, client, emptyScrapeConfig(namespace))
+	return kubernetesutils.DeleteObjects(ctx, client,
+		emptyDashboardsConfigMap(namespace),
+		emptyScrapeConfig(namespace),
+	)
+}
+
+func emptyDashboardsConfigMap(namespace string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "registry-spegel-dashboards", Namespace: namespace}}
 }
 
 func emptyScrapeConfig(namespace string) *monitoringv1alpha1.ScrapeConfig {

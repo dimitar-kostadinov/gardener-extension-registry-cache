@@ -100,6 +100,7 @@ rules:
   - configmaps
   resourceNames:
   - registry-cache-dashboards
+  - registry-spegel-dashboards
   verbs:
   - get
   - update
