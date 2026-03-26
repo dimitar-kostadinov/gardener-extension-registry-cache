@@ -4,17 +4,20 @@
 <a href="#spegel.extensions.gardener.cloud%2fv1alpha1">spegel.extensions.gardener.cloud/v1alpha1</a>
 </li>
 </ul>
+
 <h2 id="spegel.extensions.gardener.cloud/v1alpha1">spegel.extensions.gardener.cloud/v1alpha1</h2>
 <p>
-<p>Package v1alpha1 is a version of the API.</p>
+
 </p>
-Resource Types:
-<ul></ul>
-<h3 id="spegel.extensions.gardener.cloud/v1alpha1.SpegelConfig">SpegelConfig
+
+<h3 id="spegelconfig">SpegelConfig
 </h3>
+
+
 <p>
-<p>SpegelConfig contains information about the Spegel listening addresses of each Node.</p>
+SpegelConfig contains information about the Spegel listening addresses of each Node.
 </p>
+
 <table>
 <thead>
 <tr>
@@ -23,68 +26,68 @@ Resource Types:
 </tr>
 </thead>
 <tbody>
+
 <tr>
 <td>
 <code>registryPort</code></br>
 <em>
-int32
+integer
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>RegistryPort is the port that serves the OCI registry on each Node.
-<code>registryPort</code> should be a valid port number (1-65535, inclusive).
-Defaults to 15500.</p>
+<p>RegistryPort is the port that serves the OCI registry on each Node.<br />`registryPort` should be a valid port number (1-65535, inclusive).<br />Defaults to 15500.</p>
 </td>
 </tr>
 <tr>
 <td>
 <code>routerPort</code></br>
 <em>
-int32
+integer
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>RouterPort is the port for P2P router on each Node.
-<code>routerPort</code> should be a valid port number (1-65535, inclusive).
-Defaults to 15501.</p>
+<p>RouterPort is the port for P2P router on each Node.<br />`routerPort` should be a valid port number (1-65535, inclusive).<br />Defaults to 15501.</p>
 </td>
 </tr>
 <tr>
 <td>
 <code>metricsPort</code></br>
 <em>
-int32
+integer
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>MetricsPort is the metrics port on each Node.
-<code>metricsPort</code> should be a valid port number (1-65535, inclusive).
-Defaults to 19090.</p>
+<p>MetricsPort is the metrics port on each Node.<br />`metricsPort` should be a valid port number (1-65535, inclusive).<br />Defaults to 19090.</p>
 </td>
 </tr>
 <tr>
 <td>
 <code>resolveTags</code></br>
 <em>
-bool
+boolean
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>ResolveTags when true Spegel will resolve tags to digests.
-Defaults to true.</p>
+<p>ResolveTags when true Spegel will resolve tags to digests.<br />Defaults to true.</p>
 </td>
 </tr>
+
 </tbody>
 </table>
-<h3 id="spegel.extensions.gardener.cloud/v1alpha1.SpegelStatus">SpegelStatus
+
+
+<h3 id="spegelstatus">SpegelStatus
 </h3>
+
+
 <p>
-<p>SpegelStatus contains information about Spegel client TLS secrets.</p>
+SpegelStatus contains information about Spegel client TLS secrets.
 </p>
+
 <table>
 <thead>
 <tr>
@@ -93,6 +96,7 @@ Defaults to true.</p>
 </tr>
 </thead>
 <tbody>
+
 <tr>
 <td>
 <code>caSecretName</code></br>
@@ -115,9 +119,8 @@ string
 <p>ClientTLSSecretName is the name ot the Spegel client TLS secret.</p>
 </td>
 </tr>
+
 </tbody>
 </table>
-<hr/>
-<p><em>
-Generated with <a href="https://github.com/ahmetb/gen-crd-api-reference-docs">gen-crd-api-reference-docs</a>
-</em></p>
+
+

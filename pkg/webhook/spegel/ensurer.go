@@ -170,11 +170,31 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 			ImageRef: &extensionsv1alpha1.FileContentImageRef{
 				//TODO:
 				//Image:           "ghcr.io/spegel-org/spegel:v0.0.28",
-				Image:           "registry.local.gardener.cloud:5001/spegel-org/spegel:v0.5.7-test", //"reg.seed-aws.i024114.shoot.dev.k8s-hana.ondemand.com/spegel-org/spegel:v0.2.0-test3",
+				Image:           "registry.local.gardener.cloud:5001/spegel-org/spegel:v0.5.8-test", //"reg.seed-aws.i024114.shoot.dev.k8s-hana.ondemand.com/spegel-org/spegel:v0.2.0-test3",
 				FilePathInImage: "/app/spegel",
 			},
 		},
 	})
+
+	// TODO: use --config-dir to provide configuration for spegel unit logs once https://github.com/open-telemetry/opentelemetry-collector/issues/9596 is implemented.
+	otelConfigFile := extensionswebhook.FileWithPath(*newFiles, "/var/lib/opentelemetry-collector/config/config")
+	if otelConfigFile != nil && otelConfigFile.Content.Inline != nil {
+		content := otelConfigFile.Content.Inline.Data
+		if otelConfigFile.Content.Inline.Encoding == string(extensionsv1alpha1.B64FileCodecID) {
+			decodedContent, err := utils.DecodeBase64(content)
+			if err != nil {
+				return fmt.Errorf("failed to decode existing OpenTelemetry Collector config file content: %w", err)
+			}
+			content = string(decodedContent)
+		}
+		if !strings.Contains(content, "      - _SYSTEMD_UNIT: spegel.service\n") {
+			content = strings.Replace(content, "      - _SYSTEMD_UNIT: gardener-node-agent.service\n", "      - _SYSTEMD_UNIT: gardener-node-agent.service\n      - _SYSTEMD_UNIT: spegel.service\n", 1)
+			if otelConfigFile.Content.Inline.Encoding == string(extensionsv1alpha1.B64FileCodecID) {
+				content = utils.EncodeBase64([]byte(content))
+			}
+			otelConfigFile.Content.Inline.Data = content
+		}
+	}
 
 	return nil
 }

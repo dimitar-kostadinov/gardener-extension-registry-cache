@@ -7,7 +7,7 @@
 // +k8s:defaulter-gen=TypeMeta
 // +k8s:openapi-gen=true
 
-//go:generate gen-crd-api-reference-docs -api-dir . -config ../../../../hack/api-reference/spegel.json -template-dir "$GARDENER_HACK_DIR/api-reference/template" -out-file ../../../../hack/api-reference/spegel.md
+//go:generate crd-ref-docs --source-path=. --config=../../../../hack/api-reference/spegel.yaml --renderer=markdown --templates-dir=$GARDENER_HACK_DIR/api-reference/template  --log-level=ERROR --output-path=../../../../hack/api-reference/spegel.md
 
 // Package v1alpha1 is a version of the API.
 // +groupName=spegel.extensions.gardener.cloud
