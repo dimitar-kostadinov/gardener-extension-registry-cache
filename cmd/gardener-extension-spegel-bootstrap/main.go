@@ -22,6 +22,9 @@ import (
 	kubeapiserverconstants "github.com/gardener/gardener/pkg/component/kubernetes/apiserver/constants"
 	"github.com/gardener/gardener/pkg/logger"
 	"github.com/go-logr/logr"
+	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -47,7 +50,7 @@ var (
 	ctx    context.Context
 	log    logr.Logger
 	client *kubernetes.Clientset
-	limit  int = 10
+	limit  int = 3
 )
 
 // healthHandler handles only health check requests on HTTP
@@ -98,18 +101,32 @@ func peerHandler(w http.ResponseWriter, _ *http.Request) {
 		log.Info("Limiting IPAddr", "ips", ips)
 	}
 
-	ipsBytes, err := json.Marshal(ips)
+	addrInfos := []peer.AddrInfo{}
+	for _, ipAddr := range ips {
+		addr, err := manet.FromIPAndZone(ipAddr.AsSlice(), ipAddr.Zone())
+		if err != nil {
+			log.Error(err, "Cannot convert netip.Addr into Multiaddr")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		addrInfo := peer.AddrInfo{
+			ID:    "",
+			Addrs: []ma.Multiaddr{addr},
+		}
+		addrInfos = append(addrInfos, addrInfo)
+	}
+
+	addrInfosBytes, err := json.Marshal(addrInfos)
 	if err != nil {
-		log.Error(err, "Fail to marshal ips")
+		log.Error(err, "Fail to marshal AddrInfos")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	fmt.Println("ipsBytes:", string(ipsBytes))
+	fmt.Println("addrInfosBytes:", string(addrInfosBytes))
 	w.Header().Add("Content-Type", "application/json")
-	_, err = w.Write(ipsBytes)
+	_, err = w.Write(addrInfosBytes)
 	if err != nil {
-		log.Error(err, "Failed to write ips")
+		log.Error(err, "Failed to write addrInfosBytes")
 	}
 }
 

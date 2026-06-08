@@ -50,13 +50,12 @@ func New(mgr manager.Manager) (*extensionswebhook.Webhook, error) {
 	}
 
 	webhook := &extensionswebhook.Webhook{
-		Name:     Name,
-		Action:   extensionswebhook.ActionMutating,
-		Provider: "",
-		Types:    types,
-		Target:   extensionswebhook.TargetSeed,
-		Path:     "/webhooks/registry-spegel",
-		Webhook:  &admission.Webhook{Handler: handler},
+		Name:    Name,
+		Action:  extensionswebhook.ActionMutating,
+		Types:   types,
+		Target:  extensionswebhook.TargetSeed,
+		Path:    "/webhooks/registry-spegel",
+		Webhook: &admission.Webhook{Handler: handler},
 		NamespaceSelector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{v1beta1constants.LabelExtensionPrefix + "registry-spegel": "true"},
 		},

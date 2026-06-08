@@ -18,13 +18,14 @@ import (
 	kubeapiserverconstants "github.com/gardener/gardener/pkg/component/kubernetes/apiserver/constants"
 	"github.com/gardener/gardener/pkg/utils"
 	gardenerutils "github.com/gardener/gardener/pkg/utils/gardener"
+	"github.com/gardener/gardener/pkg/utils/istio"
 	kubernetesutils "github.com/gardener/gardener/pkg/utils/kubernetes"
 	"github.com/gardener/gardener/pkg/utils/managedresources"
 	secretsutils "github.com/gardener/gardener/pkg/utils/secrets"
 	secretsmanager "github.com/gardener/gardener/pkg/utils/secrets/manager"
+	istionetworkingv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,6 +57,9 @@ type Values struct {
 	Domain string
 	//MetricsPort it the metrics
 	MetricsPort int32
+	// IstioIngressGatewayLabels are the labels used to select the seed istio-ingressgateway pods.
+	// If empty, the default Gardener istio-ingressgateway labels are used.
+	IstioIngressGatewayLabels map[string]string
 }
 
 // Interface is an interface for managing Registry Caches.
@@ -210,7 +214,8 @@ func (s *spegelCache) computeResourcesSeedData(serverTlsSecretName, caBundleSecr
 	return registry.AddAllAndSerialize(
 		s.getSpegelPeersDeployment(serverTlsSecretName, caBundleSecretName, clusterCAName),
 		s.getSpegelPeersService(),
-		s.getSpegelPeersIngress(),
+		s.getSpegelPeersGateway(),
+		s.getSpegelPeersVirtualService(),
 	)
 }
 
@@ -292,7 +297,7 @@ func (s *spegelCache) getSpegelPeersDeployment(serverTlsSecretName, caBundleSecr
 					Containers: []corev1.Container{
 						{
 							Name:            "spegel-peers",
-							Image:           s.values.Image,
+							Image:           "registry.local.gardener.cloud:5001/local-skaffold_gardener-extension-registry-cache-spegel-peers:v0.23.0-19-g1a793a52-dirty@sha256:d6c7b5f0a52ee490b303faf819c00f629375644f10c5c8142b109c05e999fff5", //s.values.Image,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
@@ -418,6 +423,9 @@ func (s *spegelCache) getSpegelPeersService() *corev1.Service {
 			Name:      "spegelpeers",
 			Namespace: s.namespace,
 			Labels:    getLabels(),
+			Annotations: map[string]string{
+				"networking.istio.io/exportTo": "*",
+			},
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: getLabels(),
@@ -434,39 +442,31 @@ func (s *spegelCache) getSpegelPeersService() *corev1.Service {
 	}
 }
 
-func (s *spegelCache) getSpegelPeersIngress() *networkingv1.Ingress {
-	return &networkingv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "spegelpeers",
-			Namespace: s.namespace,
-			Labels:    getLabels(),
-			Annotations: map[string]string{
-				"nginx.ingress.kubernetes.io/backend-protocol": "HTTPS",
-				"nginx.ingress.kubernetes.io/ssl-passthrough":  "true",
-				"nginx.ingress.kubernetes.io/ssl-redirect":     "true",
-			},
-		},
+func (s *spegelCache) getSpegelPeersGateway() *istionetworkingv1beta1.Gateway {
+	gateway := &istionetworkingv1beta1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "spegelpeers", Namespace: s.namespace}}
+	_ = istio.GatewayWithTLSPassthrough(gateway, getLabels(), s.istioIngressGatewaySelector(), []string{s.values.Domain})()
+	return gateway
+}
 
-		Spec: networkingv1.IngressSpec{
-			IngressClassName: ptr.To(v1beta1constants.SeedNginxIngressClass),
-			Rules: []networkingv1.IngressRule{{
-				Host: s.values.Domain,
-				IngressRuleValue: networkingv1.IngressRuleValue{
-					HTTP: &networkingv1.HTTPIngressRuleValue{
-						Paths: []networkingv1.HTTPIngressPath{{
-							Backend: networkingv1.IngressBackend{
-								Service: &networkingv1.IngressServiceBackend{
-									Name: "spegelpeers",
-									Port: networkingv1.ServiceBackendPort{Number: 443},
-								},
-							},
-							Path:     "/",
-							PathType: ptr.To(networkingv1.PathTypePrefix),
-						}},
-					},
-				}},
-			},
-		},
+func (s *spegelCache) getSpegelPeersVirtualService() *istionetworkingv1beta1.VirtualService {
+	vs := &istionetworkingv1beta1.VirtualService{ObjectMeta: metav1.ObjectMeta{Name: "spegelpeers", Namespace: s.namespace}}
+	destinationHost := fmt.Sprintf("spegelpeers.%s.svc.cluster.local", s.namespace)
+	_ = istio.VirtualServiceWithSNIMatch(vs, getLabels(), []string{v1beta1constants.DefaultSNIIngressNamespace}, []string{s.values.Domain}, "spegelpeers", 443, destinationHost)()
+	return vs
+}
+
+
+func (s *spegelCache) istioIngressGatewaySelector() map[string]string {
+	if len(s.values.IstioIngressGatewayLabels) > 0 {
+		out := make(map[string]string, len(s.values.IstioIngressGatewayLabels))
+		for k, v := range s.values.IstioIngressGatewayLabels {
+			out[k] = v
+		}
+		return out
+	}
+	return map[string]string{
+		"app":   v1beta1constants.DefaultIngressGatewayAppLabelValue,
+		"istio": "ingressgateway",
 	}
 }
 
