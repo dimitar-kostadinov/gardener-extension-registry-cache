@@ -170,7 +170,7 @@ func (e *ensurer) EnsureAdditionalFiles(ctx context.Context, gctx extensionscont
 			ImageRef: &extensionsv1alpha1.FileContentImageRef{
 				//TODO:
 				//Image:           "ghcr.io/spegel-org/spegel:v0.0.28",
-				Image:           "registry.local.gardener.cloud:5001/spegel-org/spegel:v0.7.1-test", //"reg.seed-aws.i024114.shoot.dev.k8s-hana.ondemand.com/spegel-org/spegel:v0.2.0-test3",
+				Image:           "registry.local.gardener.cloud:5001/spegel-org/spegel:v0.7.2-test", //"reg.seed-aws.i024114.shoot.dev.k8s-hana.ondemand.com/spegel-org/spegel:v0.2.0-test3",
 				FilePathInImage: "/app/spegel",
 			},
 		},
@@ -394,11 +394,8 @@ func getCLIFlags(spegelConfig *api.SpegelConfig, ingress string) []string {
 		"--containerd-sock=/run/containerd/containerd.sock",
 		"--containerd-namespace=k8s.io",
 		"--bootstrap-kind=http",
-		// "--http-bootstrap-addr",
 		fmt.Sprintf("--http-bootstrap-url=https://%s/bootstrap-nodes", ingress),
-		fmt.Sprintf("--http-bootstrap-ca=%s", spegelBootstrapCAFile),
-		fmt.Sprintf("--http-bootstrap-tls-crt=%s", spegelBootstrapTLSCrtFile),
-		fmt.Sprintf("--http-bootstrap-tls-key=%s", spegelBootstrapTLSKeyFile),
+		"--http-bootstrap-cert-dir=/var/lib/spegel/certs",
 		"--containerd-content-path=/var/lib/containerd/io.containerd.content.v1.content",
 	}
 }

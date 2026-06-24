@@ -297,7 +297,7 @@ func (s *spegelCache) getSpegelPeersDeployment(serverTlsSecretName, caBundleSecr
 					Containers: []corev1.Container{
 						{
 							Name:            "spegel-peers",
-							Image:           "registry.local.gardener.cloud:5001/local-skaffold_gardener-extension-registry-cache-spegel-peers:v0.23.0-19-g1a793a52-dirty@sha256:d6c7b5f0a52ee490b303faf819c00f629375644f10c5c8142b109c05e999fff5", //s.values.Image,
+							Image:           "registry.local.gardener.cloud:5001/local-skaffold_gardener-extension-registry-cache-spegel-peers:v0.23.0-20-gf2d11ee6-dirty@sha256:d6c7b5f0a52ee490b303faf819c00f629375644f10c5c8142b109c05e999fff5", //s.values.Image,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
@@ -454,7 +454,6 @@ func (s *spegelCache) getSpegelPeersVirtualService() *istionetworkingv1beta1.Vir
 	_ = istio.VirtualServiceWithSNIMatch(vs, getLabels(), []string{v1beta1constants.DefaultSNIIngressNamespace}, []string{s.values.Domain}, "spegelpeers", 443, destinationHost)()
 	return vs
 }
-
 
 func (s *spegelCache) istioIngressGatewaySelector() map[string]string {
 	if len(s.values.IstioIngressGatewayLabels) > 0 {
